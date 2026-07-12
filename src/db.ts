@@ -2,8 +2,11 @@
 
 export const db = {
   usuarios: [
-    { id: 1, nome: 'Administrador', email: 'vidal2311usa@gmail.com', perfil: 'Administrador' }
+    { id: 1, nome: 'Administrador Vidal', email: 'vidal2311usa@gmail.com', perfil: 'Administrador' },
+    { id: 5, nome: 'Cria2311', email: 'cria2311@gmail.com', perfil: 'Advogado' },
+    { id: 6, nome: 'BandaVai', email: 'bandavai62@gmail.com', perfil: 'Administrador' }
   ],
+  auditoria: [] as any[],
   clientes: [
     { id: 1, tipo: 'PF' as const, nome: 'João Pedro Almeida', doc: '123.456.789-00', contato: '(31) 99888-1122', email: 'joao@email.com', endereco: 'Ipatinga - MG' },
     { id: 2, tipo: 'PJ' as const, nome: 'Metalúrgica Vale Ltda', doc: '12.345.678/0001-90', contato: '(31) 3333-4455', email: 'contato@vale.com.br', endereco: 'Coronel Fabriciano - MG' },
@@ -42,7 +45,7 @@ export const db = {
     ultimoBackup: new Date(Date.now() - 3 * 3600 * 1000).toISOString(),
     ultimaSincroniaTribunal: new Date(Date.now() - 20 * 3600 * 1000).toISOString(),
   },
-  nextId: { cliente: 4, processo: 4, evento: 4, tarefa: 4, honorario: 4, documento: 3, usuario: 5, despesa: 3 },
+  nextId: { cliente: 4, processo: 4, evento: 4, tarefa: 4, honorario: 4, documento: 3, usuario: 5, despesa: 3, auditoria: 1 },
 };
 
 export function addDays(n: number): string {
@@ -87,7 +90,7 @@ export async function loadAllDataFromBackend() {
       return json.success ? json.data : [];
     };
 
-    const [clientes, processos, eventos, tarefas, honorarios, despesas, documentos, usuarios, integracoesRes] = await Promise.all([
+    const [clientes, processos, eventos, tarefas, honorarios, despesas, documentos, usuarios, auditoria, integracoesRes] = await Promise.all([
       fetchCollection('/api/clientes'),
       fetchCollection('/api/processos'),
       fetchCollection('/api/eventos'),
@@ -96,6 +99,7 @@ export async function loadAllDataFromBackend() {
       fetchCollection('/api/despesas'),
       fetchCollection('/api/documentos'),
       fetchCollection('/api/usuarios'),
+      fetchCollection('/api/auditoria'),
       fetch('/api/integracoes').then(res => res.json()).catch(() => null),
     ]);
 
@@ -107,6 +111,7 @@ export async function loadAllDataFromBackend() {
     db.despesas = despesas;
     db.documentos = documentos;
     db.usuarios = usuarios;
+    db.auditoria = auditoria;
     if (integracoesRes && integracoesRes.success && integracoesRes.data) {
       db.integracoes = integracoesRes.data;
     }

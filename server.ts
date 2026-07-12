@@ -47,6 +47,57 @@ try {
   console.error('[FIREBASE] Erro ao inicializar o Firebase Admin:', err.message);
 }
 
+// Sincronização e persistência do Banco em arquivo local
+const LOCAL_DB_PATH = path.join(process.cwd(), 'db_local.json');
+
+function saveLocalDb() {
+  try {
+    fs.writeFileSync(LOCAL_DB_PATH, JSON.stringify({
+      usuarios: db.usuarios,
+      clientes: db.clientes,
+      processos: db.processos,
+      eventos: db.eventos,
+      tarefas: db.tarefas,
+      honorarios: db.honorarios,
+      despesas: db.despesas,
+      documentos: db.documentos,
+      auditoria: db.auditoria,
+      integracoes: db.integracoes,
+      nextId: db.nextId
+    }, null, 2), 'utf-8');
+    console.log('[LOCAL DB] Banco de dados local persistido com sucesso.');
+  } catch (err: any) {
+    console.error('[LOCAL DB] Erro ao salvar banco local:', err.message);
+  }
+}
+
+function loadLocalDb() {
+  try {
+    if (fs.existsSync(LOCAL_DB_PATH)) {
+      const data = JSON.parse(fs.readFileSync(LOCAL_DB_PATH, 'utf-8'));
+      if (data.usuarios) db.usuarios = data.usuarios;
+      if (data.clientes) db.clientes = data.clientes;
+      if (data.processos) db.processos = data.processos;
+      if (data.eventos) db.eventos = data.eventos;
+      if (data.tarefas) db.tarefas = data.tarefas;
+      if (data.honorarios) db.honorarios = data.honorarios;
+      if (data.despesas) db.despesas = data.despesas;
+      if (data.documentos) db.documentos = data.documentos;
+      if (data.auditoria) db.auditoria = data.auditoria;
+      if (data.integracoes) db.integracoes = data.integracoes;
+      if (data.nextId) db.nextId = data.nextId;
+      console.log('[LOCAL DB] Banco de dados carregado com sucesso do arquivo local. Próximos IDs:', db.nextId);
+    } else {
+      console.log('[LOCAL DB] Arquivo db_local.json não encontrado. Usando dados iniciais.');
+    }
+  } catch (err: any) {
+    console.error('[LOCAL DB] Erro ao carregar banco local:', err.message);
+  }
+}
+
+// Inicializar banco local na inicialização do servidor
+loadLocalDb();
+
 // Sincronização do Banco em memória com o Firestore
 async function syncFirestore() {
   if (!firestoreDb) {
@@ -65,7 +116,8 @@ async function syncFirestore() {
       { name: 'tarefas', key: 'tarefas' },
       { name: 'honorarios', key: 'honorarios' },
       { name: 'despesas', key: 'despesas' },
-      { name: 'documentos', key: 'documentos' }
+      { name: 'documentos', key: 'documentos' },
+      { name: 'auditoria', key: 'auditoria' }
     ];
 
     for (const coll of collections) {
@@ -105,6 +157,38 @@ async function syncFirestore() {
       }
     }
 
+    // Sincronizar usuários do Firebase Auth com a coleção 'usuarios' do Firestore
+    try {
+      console.log('[FIREBASE] Sincronizando usuários do Firebase Auth...');
+      const authUsers = await admin.auth().listUsers();
+      const existingEmails = new Set(db.usuarios.map(u => (u.email || '').toLowerCase()));
+      let maxId = Math.max(...db.usuarios.map(u => u.id || 0), 0);
+
+      const usuariosRef = firestoreDb.collection('usuarios');
+      let altered = false;
+      for (const authUser of authUsers.users) {
+        if (authUser.email) {
+          const emailLower = authUser.email.toLowerCase();
+          if (!existingEmails.has(emailLower)) {
+            maxId++;
+            const newUser = {
+              id: maxId,
+              nome: authUser.displayName || authUser.email.split('@')[0],
+              email: authUser.email,
+              perfil: (emailLower === 'vidal2311usa@gmail.com' || emailLower === 'bandavai62@gmail.com') ? 'Administrador' : 'Advogado'
+            };
+            console.log(`[FIREBASE] Adicionando novo usuário encontrado no Auth para o Firestore: ${emailLower}`);
+            await usuariosRef.doc(String(newUser.id)).set(newUser);
+            db.usuarios.push(newUser);
+            existingEmails.add(emailLower);
+            altered = true;
+          }
+        }
+      }
+    } catch (errAuth: any) {
+      console.error('[FIREBASE] Erro ao sincronizar usuários do Firebase Auth:', errAuth.message);
+    }
+
     // Sincronizar as integrações
     try {
       const configRef = firestoreDb.collection('config').doc('integracoes');
@@ -128,8 +212,10 @@ async function syncFirestore() {
       documento: Math.max(...db.documentos.map(x => x.id), 0) + 1,
       usuario: Math.max(...db.usuarios.map(x => x.id), 0) + 1,
       despesa: Math.max(...db.despesas.map(x => x.id), 0) + 1,
+      auditoria: Math.max(...db.auditoria.map(x => x.id), 0) + 1,
     };
     console.log('[FIREBASE] Sincronização concluída! Próximos IDs:', db.nextId);
+    saveLocalDb();
   } catch (errGlobal: any) {
     console.error('[FIREBASE] Erro global na sincronização:', errGlobal.message);
   }
@@ -156,6 +242,44 @@ async function startServer() {
   const PORT = process.env.PORT || 3000;
 
   app.use(express.json());
+
+  async function logAudit(req: express.Request, acao: string, detalhes: string) {
+    const usuarioEmail = req.headers['x-user-email'] as string || 'sistema@escritorio.com.br';
+    const usuarioNome = req.headers['x-user-name'] as string || 'Sistema';
+    const newLog = {
+      id: db.nextId.auditoria++,
+      usuarioEmail,
+      usuarioNome,
+      acao,
+      detalhes,
+      dataHora: new Date().toISOString()
+    };
+    db.auditoria.push(newLog);
+    try {
+      if (firestoreDb) {
+        await firestoreDb.collection('auditoria').doc(String(newLog.id)).set(newLog);
+      }
+    } catch (err: any) {
+      console.error('[FIREBASE] Erro ao salvar log de auditoria:', err.message);
+    }
+    saveLocalDb();
+  }
+
+  // === AUDITORIA ===
+  app.get('/api/auditoria', (_req, res) => {
+    const sorted = [...db.auditoria].sort((a, b) => new Date(b.dataHora).getTime() - new Date(a.dataHora).getTime());
+    res.json({ success: true, data: sorted });
+  });
+
+  app.post('/api/auditoria', async (req, res) => {
+    const { acao, detalhes } = req.body;
+    if (!acao || !detalhes) {
+      res.status(400).json({ success: false, message: 'Ação e detalhes são obrigatórios.' });
+      return;
+    }
+    await logAudit(req, acao, detalhes);
+    res.status(201).json({ success: true });
+  });
 
   // === CLIENTES ===
   app.get('/api/clientes', (_req, res) => {
@@ -205,11 +329,14 @@ async function startServer() {
     } catch (err: any) {
       console.error('[FIREBASE] Erro ao salvar cliente:', err.message);
     }
+    await logAudit(req, 'Criar Cliente', `Criou o cliente ${newClient.nome} (ID: ${newClient.id}, Tipo: ${newClient.tipo})`);
     res.status(201).json({ success: true, message: 'Cliente cadastrado!', data: newClient });
   });
 
   app.delete('/api/clientes/:id', async (req, res) => {
     const id = parseInt(req.params.id);
+    const clientToDelete = db.clientes.find((c) => c.id === id);
+    const clientName = clientToDelete ? clientToDelete.nome : 'Desconhecido';
     db.clientes = db.clientes.filter((c) => c.id !== id);
     try {
       if (firestoreDb) {
@@ -218,6 +345,7 @@ async function startServer() {
     } catch (err: any) {
       console.error('[FIREBASE] Erro ao deletar cliente:', err.message);
     }
+    await logAudit(req, 'Deletar Cliente', `Excluiu o cliente ${clientName} (ID: ${id})`);
     res.json({ success: true });
   });
 
@@ -253,6 +381,7 @@ async function startServer() {
     } catch (err: any) {
       console.error('[FIREBASE] Erro ao salvar processo:', err.message);
     }
+    await logAudit(req, 'Criar Processo', `Criou o processo nº ${newProcesso.numero} (ID: ${newProcesso.id})`);
     res.status(201).json({ success: true, data: newProcesso });
   });
 
@@ -276,11 +405,14 @@ async function startServer() {
     } catch (err: any) {
       console.error('[FIREBASE] Erro ao atualizar andamento do processo:', err.message);
     }
+    await logAudit(req, 'Adicionar Andamento', `Adicionou andamento ao processo nº ${proc.numero}: "${desc.trim()}"`);
     res.json({ success: true, data: proc });
   });
 
   app.delete('/api/processos/:id', async (req, res) => {
     const id = parseInt(req.params.id);
+    const procToDelete = db.processos.find((p) => p.id === id);
+    const procNum = procToDelete ? procToDelete.numero : 'Desconhecido';
     db.processos = db.processos.filter((p) => p.id !== id);
     try {
       if (firestoreDb) {
@@ -289,6 +421,7 @@ async function startServer() {
     } catch (err: any) {
       console.error('[FIREBASE] Erro ao deletar processo:', err.message);
     }
+    await logAudit(req, 'Deletar Processo', `Excluiu o processo nº ${procNum} (ID: ${id})`);
     res.json({ success: true });
   });
 
@@ -319,11 +452,14 @@ async function startServer() {
     } catch (err: any) {
       console.error('[FIREBASE] Erro ao salvar evento:', err.message);
     }
+    await logAudit(req, 'Criar Evento', `Criou o evento "${newEvent.tipo}" na data ${newEvent.data} às ${newEvent.hora}`);
     res.status(201).json({ success: true, data: newEvent });
   });
 
   app.delete('/api/eventos/:id', async (req, res) => {
     const id = parseInt(req.params.id);
+    const evToDelete = db.eventos.find((e) => e.id === id);
+    const evType = evToDelete ? evToDelete.tipo : 'Desconhecido';
     db.eventos = db.eventos.filter((e) => e.id !== id);
     try {
       if (firestoreDb) {
@@ -332,6 +468,7 @@ async function startServer() {
     } catch (err: any) {
       console.error('[FIREBASE] Erro ao deletar evento:', err.message);
     }
+    await logAudit(req, 'Deletar Evento', `Excluiu o evento "${evType}" (ID: ${id})`);
     res.json({ success: true });
   });
 
@@ -363,6 +500,7 @@ async function startServer() {
     } catch (err: any) {
       console.error('[FIREBASE] Erro ao salvar tarefa:', err.message);
     }
+    await logAudit(req, 'Criar Tarefa', `Criou a tarefa "${newTask.titulo}" (ID: ${newTask.id})`);
     res.status(201).json({ success: true, data: newTask });
   });
 
@@ -382,11 +520,14 @@ async function startServer() {
     } catch (err: any) {
       console.error('[FIREBASE] Erro ao atualizar tarefa:', err.message);
     }
+    await logAudit(req, 'Atualizar Tarefa', `Alterou o status da tarefa "${task.titulo}" para "${status}"`);
     res.json({ success: true, data: task });
   });
 
   app.delete('/api/tarefas/:id', async (req, res) => {
     const id = parseInt(req.params.id);
+    const tToDelete = db.tarefas.find((t) => t.id === id);
+    const tTitle = tToDelete ? tToDelete.titulo : 'Desconhecido';
     db.tarefas = db.tarefas.filter((t) => t.id !== id);
     try {
       if (firestoreDb) {
@@ -395,6 +536,7 @@ async function startServer() {
     } catch (err: any) {
       console.error('[FIREBASE] Erro ao deletar tarefa:', err.message);
     }
+    await logAudit(req, 'Deletar Tarefa', `Excluiu a tarefa "${tTitle}" (ID: ${id})`);
     res.json({ success: true });
   });
 
@@ -426,6 +568,7 @@ async function startServer() {
     } catch (err: any) {
       console.error('[FIREBASE] Erro ao salvar honorário:', err.message);
     }
+    await logAudit(req, 'Criar Honorário', `Criou o honorário no valor de R$ ${newHonorario.valor} (ID: ${newHonorario.id})`);
     res.status(201).json({ success: true, data: newHonorario });
   });
 
@@ -444,6 +587,7 @@ async function startServer() {
     } catch (err: any) {
       console.error('[FIREBASE] Erro ao atualizar honorário:', err.message);
     }
+    await logAudit(req, 'Baixa de Honorário', `Marcou o honorário ID ${hon.id} como pago`);
     res.json({ success: true, data: hon });
   });
 
@@ -457,6 +601,7 @@ async function startServer() {
     } catch (err: any) {
       console.error('[FIREBASE] Erro ao deletar honorário:', err.message);
     }
+    await logAudit(req, 'Deletar Honorário', `Excluiu o honorário ID ${id}`);
     res.json({ success: true });
   });
 
@@ -486,6 +631,7 @@ async function startServer() {
     } catch (err: any) {
       console.error('[FIREBASE] Erro ao salvar despesa:', err.message);
     }
+    await logAudit(req, 'Criar Despesa', `Criou a despesa "${newDespesa.descricao}" no valor de R$ ${newDespesa.valor}`);
     res.status(201).json({ success: true, data: newDespesa });
   });
 
@@ -504,11 +650,14 @@ async function startServer() {
     } catch (err: any) {
       console.error('[FIREBASE] Erro ao atualizar despesa:', err.message);
     }
+    await logAudit(req, 'Baixa de Despesa', `Marcou a despesa "${despesa.descricao}" (ID: ${despesa.id}) como paga`);
     res.json({ success: true, data: despesa });
   });
 
   app.delete('/api/despesas/:id', async (req, res) => {
     const id = parseInt(req.params.id);
+    const dToDelete = db.despesas.find((d) => d.id === id);
+    const dDesc = dToDelete ? dToDelete.descricao : 'Desconhecido';
     db.despesas = db.despesas.filter((d) => d.id !== id);
     try {
       if (firestoreDb) {
@@ -517,6 +666,7 @@ async function startServer() {
     } catch (err: any) {
       console.error('[FIREBASE] Erro ao deletar despesa:', err.message);
     }
+    await logAudit(req, 'Deletar Despesa', `Excluiu a despesa "${dDesc}" (ID: ${id})`);
     res.json({ success: true });
   });
 
@@ -548,11 +698,14 @@ async function startServer() {
     } catch (err: any) {
       console.error('[FIREBASE] Erro ao salvar documento:', err.message);
     }
+    await logAudit(req, 'Criar Documento', `Criou o documento "${newDoc.nome}" (ID: ${newDoc.id})`);
     res.status(201).json({ success: true, data: newDoc });
   });
 
   app.delete('/api/documentos/:id', async (req, res) => {
     const id = parseInt(req.params.id);
+    const docToDelete = db.documentos.find((d) => d.id === id);
+    const docNome = docToDelete ? docToDelete.nome : 'Desconhecido';
     db.documentos = db.documentos.filter((d) => d.id !== id);
     try {
       if (firestoreDb) {
@@ -561,11 +714,47 @@ async function startServer() {
     } catch (err: any) {
       console.error('[FIREBASE] Erro ao deletar documento:', err.message);
     }
+    await logAudit(req, 'Deletar Documento', `Excluiu o documento "${docNome}" (ID: ${id})`);
     res.json({ success: true });
   });
 
   // === USUÁRIOS ===
-  app.get('/api/usuarios', (_req, res) => {
+  app.get('/api/usuarios', async (_req, res) => {
+    if (firestoreDb) {
+      try {
+        const authUsers = await admin.auth().listUsers();
+        const existingEmails = new Set(db.usuarios.map(u => (u.email || '').toLowerCase()));
+        let maxId = Math.max(...db.usuarios.map(u => u.id || 0), 0);
+
+        const usuariosRef = firestoreDb.collection('usuarios');
+        let altered = false;
+        for (const authUser of authUsers.users) {
+          if (authUser.email) {
+            const emailLower = authUser.email.toLowerCase();
+            if (!existingEmails.has(emailLower)) {
+              maxId++;
+              const newUser = {
+                id: maxId,
+                nome: authUser.displayName || authUser.email.split('@')[0],
+                email: authUser.email,
+                perfil: (emailLower === 'vidal2311usa@gmail.com' || emailLower === 'bandavai62@gmail.com') ? 'Administrador' : 'Advogado'
+              };
+              console.log(`[FIREBASE] Adicionando novo usuário encontrado no Auth para o Firestore: ${emailLower}`);
+              await usuariosRef.doc(String(newUser.id)).set(newUser);
+              db.usuarios.push(newUser);
+              existingEmails.add(emailLower);
+              altered = true;
+            }
+          }
+        }
+        if (altered) {
+          db.nextId.usuario = maxId + 1;
+          saveLocalDb();
+        }
+      } catch (err: any) {
+        console.error('[FIREBASE] Erro ao sincronizar usuários em /api/usuarios:', err.message);
+      }
+    }
     res.json({ success: true, data: db.usuarios });
   });
 
@@ -584,11 +773,14 @@ async function startServer() {
     } catch (err: any) {
       console.error('[FIREBASE] Erro ao salvar usuário:', err.message);
     }
+    await logAudit(req, 'Criar Usuário', `Criou o usuário "${newUser.nome}" (${newUser.email}, Perfil: ${newUser.perfil})`);
     res.status(201).json({ success: true, data: newUser });
   });
 
   app.delete('/api/usuarios/:id', async (req, res) => {
     const id = parseInt(req.params.id);
+    const uToDelete = db.usuarios.find((u) => u.id === id);
+    const uEmail = uToDelete ? uToDelete.email : 'Desconhecido';
     db.usuarios = db.usuarios.filter((u) => u.id !== id);
     try {
       if (firestoreDb) {
@@ -597,6 +789,7 @@ async function startServer() {
     } catch (err: any) {
       console.error('[FIREBASE] Erro ao deletar usuário:', err.message);
     }
+    await logAudit(req, 'Deletar Usuário', `Excluiu o usuário "${uEmail}" (ID: ${id})`);
     res.json({ success: true });
   });
 
@@ -696,6 +889,7 @@ async function startServer() {
     } catch (err: any) {
       console.error('[FIREBASE] Erro ao salvar senha do usuário:', err.message);
     }
+    await logAudit(req, 'Redefinir Senha', `Redefiniu a senha do usuário ${user.nome} (${user.email})`);
 
     resetTokens.delete(emailKey); // use token only once
     res.json({ success: true, message: 'Senha redefinida com sucesso!' });
@@ -715,6 +909,7 @@ async function startServer() {
     } catch (err: any) {
       console.error('[FIREBASE] Erro ao salvar configurações de integrações:', err.message);
     }
+    await logAudit(req, 'Atualizar Integrações', `Atualizou as configurações de integrações do sistema: ${JSON.stringify(req.body)}`);
     res.json({ success: true, data: db.integracoes });
   });
 

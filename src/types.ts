@@ -102,3 +102,12 @@ export interface ApiResponse<T> {
   data?: T;
   errors?: Record<string, string>;
 }
+
+export interface AuditLog {
+  id: number;
+  usuarioEmail: string;
+  usuarioNome: string;
+  acao: string;
+  detalhes: string;
+  dataHora: string;
+}
