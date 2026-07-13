@@ -1060,13 +1060,23 @@ function Clientes({ setModal, update, confirmAction, showToast }: any) {
 
         let undoClicked = false;
 
-        // Timer para exclusão definitiva no backend
+        // Timer para exclusão definitiva no backend/Firestore
         const timeoutId = setTimeout(async () => {
           if (!undoClicked) {
             try {
-              await fetch(`/api/clientes/${id}`, { method: 'DELETE' });
+              const res = await fetch(`/api/clientes/${id}`, { method: 'DELETE' });
+              if (!res.ok) {
+                throw new Error('Falha no status HTTP ' + res.status);
+              }
             } catch (err) {
-              console.error('Erro ao excluir cliente no backend:', err);
+              console.warn('[CLIENTE DELETE FALLBACK] Erro ao excluir cliente via backend. Tentando Firestore...', err);
+              try {
+                const { doc, deleteDoc } = await import('firebase/firestore');
+                const { firestore } = await import('./firebase');
+                await deleteDoc(doc(firestore, 'clientes', String(id)));
+              } catch (fErr) {
+                console.error('[CLIENTE DELETE CRITICAL] Erro ao excluir cliente no Firestore:', fErr);
+              }
             }
           }
         }, 5000);
@@ -1189,14 +1199,22 @@ function Processos({ setViewingProcesso, setModal, update, confirmAction }: any)
       'Excluir Processo',
       'Deseja realmente excluir este processo? Todos os andamentos e informações deste processo serão permanentemente removidos.',
       async () => {
+        db.processos = db.processos.filter((p) => p.id !== id);
+        update();
         try {
           const res = await fetch(`/api/processos/${id}`, { method: 'DELETE' });
-          if (res.ok) {
-            db.processos = db.processos.filter((p) => p.id !== id);
-            update();
+          if (!res.ok) {
+            throw new Error('Falha no status HTTP ' + res.status);
           }
         } catch (err) {
-          console.error('Erro ao excluir processo:', err);
+          console.warn('[PROCESSO DELETE FALLBACK] Erro ao excluir processo via backend. Tentando Firestore...', err);
+          try {
+            const { doc, deleteDoc } = await import('firebase/firestore');
+            const { firestore } = await import('./firebase');
+            await deleteDoc(doc(firestore, 'processos', String(id)));
+          } catch (fErr) {
+            console.error('[PROCESSO DELETE CRITICAL] Erro ao excluir processo no Firestore:', fErr);
+          }
         }
       }
     );
@@ -1364,9 +1382,19 @@ function Agenda({ setModal, update, confirmAction }: any) {
         db.eventos = db.eventos.filter((e) => e.id !== id);
         update();
         try {
-          await fetch(`/api/eventos/${id}`, { method: 'DELETE' });
+          const res = await fetch(`/api/eventos/${id}`, { method: 'DELETE' });
+          if (!res.ok) {
+            throw new Error('Falha no status HTTP ' + res.status);
+          }
         } catch (err) {
-          console.error('Erro ao excluir evento:', err);
+          console.warn('[EVENTO DELETE FALLBACK] Erro ao excluir evento via backend. Tentando Firestore...', err);
+          try {
+            const { doc, deleteDoc } = await import('firebase/firestore');
+            const { firestore } = await import('./firebase');
+            await deleteDoc(doc(firestore, 'eventos', String(id)));
+          } catch (fErr) {
+            console.error('[EVENTO DELETE CRITICAL] Erro ao excluir evento no Firestore:', fErr);
+          }
         }
       }
     );
@@ -1456,13 +1484,23 @@ function Tarefas({ setModal, update, confirmAction, showToast }: any) {
       t.status = newStatus as any;
       update();
       try {
-        await fetch(`/api/tarefas/${id}`, {
+        const res = await fetch(`/api/tarefas/${id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ status: newStatus }),
         });
+        if (!res.ok) {
+          throw new Error('Falha no status HTTP ' + res.status);
+        }
       } catch (err) {
-        console.error('Erro ao atualizar status da tarefa:', err);
+        console.warn('[TAREFA STATUS UPDATE FALLBACK] Erro ao atualizar status via backend. Tentando Firestore...', err);
+        try {
+          const { doc, setDoc } = await import('firebase/firestore');
+          const { firestore } = await import('./firebase');
+          await setDoc(doc(firestore, 'tarefas', String(id)), t);
+        } catch (fErr) {
+          console.error('[TAREFA STATUS UPDATE CRITICAL] Erro ao salvar status no Firestore:', fErr);
+        }
       }
     }
   };
@@ -1481,13 +1519,23 @@ function Tarefas({ setModal, update, confirmAction, showToast }: any) {
 
         let undoClicked = false;
 
-        // Timer para exclusão definitiva no backend
+        // Timer para exclusão definitiva no backend/Firestore
         const timeoutId = setTimeout(async () => {
           if (!undoClicked) {
             try {
-              await fetch(`/api/tarefas/${id}`, { method: 'DELETE' });
+              const res = await fetch(`/api/tarefas/${id}`, { method: 'DELETE' });
+              if (!res.ok) {
+                throw new Error('Falha no status HTTP ' + res.status);
+              }
             } catch (err) {
-              console.error('Erro ao excluir tarefa no backend:', err);
+              console.warn('[TAREFA DELETE FALLBACK] Erro ao excluir tarefa no backend. Tentando Firestore...', err);
+              try {
+                const { doc, deleteDoc } = await import('firebase/firestore');
+                const { firestore } = await import('./firebase');
+                await deleteDoc(doc(firestore, 'tarefas', String(id)));
+              } catch (fErr) {
+                console.error('[TAREFA DELETE CRITICAL] Erro ao excluir no Firestore:', fErr);
+              }
             }
           }
         }, 5000);
@@ -1592,9 +1640,23 @@ function Financeiro({ setModal, update, confirmAction }: any) {
         const hon = db.honorarios.find((h) => h.id === id);
         if (hon) hon.status = 'pago';
         update();
+      } else {
+        throw new Error('Falha no status HTTP ' + res.status);
       }
     } catch (err) {
-      console.error('Erro ao pagar honorário:', err);
+      console.warn('[HONORARIO UPDATE FALLBACK] Erro ao pagar honorário via backend. Tentando Firestore...', err);
+      try {
+        const hon = db.honorarios.find((h) => h.id === id);
+        if (hon) {
+          hon.status = 'pago';
+          const { doc, setDoc } = await import('firebase/firestore');
+          const { firestore } = await import('./firebase');
+          await setDoc(doc(firestore, 'honorarios', String(id)), hon);
+          update();
+        }
+      } catch (fErr) {
+        console.error('[HONORARIO UPDATE CRITICAL] Erro ao pagar honorário no Firestore:', fErr);
+      }
     }
   };
 
@@ -1603,14 +1665,22 @@ function Financeiro({ setModal, update, confirmAction }: any) {
       'Excluir Honorário',
       'Deseja realmente excluir este lançamento de honorário?',
       async () => {
+        db.honorarios = db.honorarios.filter((h) => h.id !== id);
+        update();
         try {
           const res = await fetch(`/api/honorarios/${id}`, { method: 'DELETE' });
-          if (res.ok) {
-            db.honorarios = db.honorarios.filter((h) => h.id !== id);
-            update();
+          if (!res.ok) {
+            throw new Error('Falha no status HTTP ' + res.status);
           }
         } catch (err) {
-          console.error('Erro ao excluir honorário:', err);
+          console.warn('[HONORARIO DELETE FALLBACK] Erro ao excluir honorário via backend. Tentando Firestore...', err);
+          try {
+            const { doc, deleteDoc } = await import('firebase/firestore');
+            const { firestore } = await import('./firebase');
+            await deleteDoc(doc(firestore, 'honorarios', String(id)));
+          } catch (fErr) {
+            console.error('[HONORARIO DELETE CRITICAL] Erro ao excluir honorário no Firestore:', fErr);
+          }
         }
       }
     );
@@ -1623,9 +1693,23 @@ function Financeiro({ setModal, update, confirmAction }: any) {
         const des = db.despesas.find((d) => d.id === id);
         if (des) des.status = 'pago';
         update();
+      } else {
+        throw new Error('Falha no status HTTP ' + res.status);
       }
     } catch (err) {
-      console.error('Erro ao pagar despesa:', err);
+      console.warn('[DESPESA UPDATE FALLBACK] Erro ao pagar despesa via backend. Tentando Firestore...', err);
+      try {
+        const des = db.despesas.find((d) => d.id === id);
+        if (des) {
+          des.status = 'pago';
+          const { doc, setDoc } = await import('firebase/firestore');
+          const { firestore } = await import('./firebase');
+          await setDoc(doc(firestore, 'despesas', String(id)), des);
+          update();
+        }
+      } catch (fErr) {
+        console.error('[DESPESA UPDATE CRITICAL] Erro ao pagar despesa no Firestore:', fErr);
+      }
     }
   };
 
@@ -1634,14 +1718,22 @@ function Financeiro({ setModal, update, confirmAction }: any) {
       'Excluir Despesa',
       'Deseja realmente excluir este lançamento de despesa?',
       async () => {
+        db.despesas = db.despesas.filter((d) => d.id !== id);
+        update();
         try {
           const res = await fetch(`/api/despesas/${id}`, { method: 'DELETE' });
-          if (res.ok) {
-            db.despesas = db.despesas.filter((d) => d.id !== id);
-            update();
+          if (!res.ok) {
+            throw new Error('Falha no status HTTP ' + res.status);
           }
         } catch (err) {
-          console.error('Erro ao excluir despesa:', err);
+          console.warn('[DESPESA DELETE FALLBACK] Erro ao excluir despesa via backend. Tentando Firestore...', err);
+          try {
+            const { doc, deleteDoc } = await import('firebase/firestore');
+            const { firestore } = await import('./firebase');
+            await deleteDoc(doc(firestore, 'despesas', String(id)));
+          } catch (fErr) {
+            console.error('[DESPESA DELETE CRITICAL] Erro ao excluir despesa no Firestore:', fErr);
+          }
         }
       }
     );
@@ -1811,14 +1903,22 @@ function Documentos({ setModal, update, confirmAction }: any) {
       'Excluir Documento',
       'Deseja realmente excluir este documento do sistema? Esta ação é irreversível.',
       async () => {
+        db.documentos = db.documentos.filter((d) => d.id !== id);
+        update();
         try {
           const res = await fetch(`/api/documentos/${id}`, { method: 'DELETE' });
-          if (res.ok) {
-            db.documentos = db.documentos.filter((d) => d.id !== id);
-            update();
+          if (!res.ok) {
+            throw new Error('Falha no status HTTP ' + res.status);
           }
         } catch (err) {
-          console.error('Erro ao excluir documento:', err);
+          console.warn('[DOCUMENTO DELETE FALLBACK] Erro ao excluir documento via backend. Tentando Firestore...', err);
+          try {
+            const { doc, deleteDoc } = await import('firebase/firestore');
+            const { firestore } = await import('./firebase');
+            await deleteDoc(doc(firestore, 'documentos', String(id)));
+          } catch (fErr) {
+            console.error('[DOCUMENTO DELETE CRITICAL] Erro ao excluir documento no Firestore:', fErr);
+          }
         }
       }
     );
@@ -2365,9 +2465,20 @@ function Integracoes({ update }: any) {
         const json = await res.json();
         db.integracoes = json.data;
         update();
+      } else {
+        throw new Error('Falha no status HTTP ' + res.status);
       }
     } catch (err) {
-      console.error('Erro ao atualizar integração:', err);
+      console.warn('[INTEGRACOES UPDATE FALLBACK] Erro ao atualizar integração via backend. Tentando Firestore...', err);
+      try {
+        db.integracoes = updated;
+        update();
+        const { doc, setDoc } = await import('firebase/firestore');
+        const { firestore } = await import('./firebase');
+        await setDoc(doc(firestore, 'integracoes', 'default'), updated);
+      } catch (fErr) {
+        console.error('[INTEGRACOES UPDATE CRITICAL] Erro ao salvar integrações no Firestore:', fErr);
+      }
     }
   };
 
