@@ -1014,7 +1014,7 @@ Resuma em até 6 linhas com: visão geral, situação atual e próximos passos.`
 
     try {
       const ai = getGenAI();
-      const response = await ai.models.generateContent({ model: 'gemini-1.5-flash', contents: prompt });
+      const response = await ai.models.generateContent({ model: 'gemini-3.5-flash', contents: prompt });
       res.json({ success: true, data: { resumo: response.text } });
     } catch (err: any) {
       res.status(500).json({ success: false, message: 'Erro na IA.', error: err.message });
@@ -1048,7 +1048,7 @@ Estruture com: endereçamento, qualificação, fatos, fundamentos legais, pedido
 
     try {
       const ai = getGenAI();
-      const response = await ai.models.generateContent({ model: 'gemini-1.5-flash', contents: prompt });
+      const response = await ai.models.generateContent({ model: 'gemini-3.5-flash', contents: prompt });
       res.json({ success: true, data: { documentoGerado: response.text } });
     } catch (err: any) {
       res.status(500).json({ success: false, message: 'Erro na IA.', error: err.message });
@@ -1072,7 +1072,7 @@ Estruture respostas em: Resumo, Questões jurídicas, Legislação, Análise, Es
 
     try {
       const ai = getGenAI();
-      const response = await ai.models.generateContent({ model: 'gemini-1.5-flash', contents });
+      const response = await ai.models.generateContent({ model: 'gemini-3.5-flash', contents });
       res.json({ success: true, data: { resposta: response.text } });
     } catch (err: any) {
       res.status(500).json({ success: false, message: 'Erro na IA.', error: err.message });
@@ -1093,7 +1093,7 @@ Identifique: cláusulas abusivas, riscos, responsabilidades, multas, garantias, 
 
     try {
       const ai = getGenAI();
-      const response = await ai.models.generateContent({ model: 'gemini-1.5-flash', contents: prompt });
+      const response = await ai.models.generateContent({ model: 'gemini-3.5-flash', contents: prompt });
       res.json({ success: true, data: { analise: response.text } });
     } catch (err: any) {
       res.status(500).json({ success: false, message: 'Erro na IA.', error: err.message });
@@ -1115,7 +1115,7 @@ Identifique: pontos fortes, pontos fracos, riscos, teses favoráveis, teses cont
 
     try {
       const ai = getGenAI();
-      const response = await ai.models.generateContent({ model: 'gemini-1.5-flash', contents: prompt });
+      const response = await ai.models.generateContent({ model: 'gemini-3.5-flash', contents: prompt });
       res.json({ success: true, data: { estrategia: response.text } });
     } catch (err: any) {
       res.status(500).json({ success: false, message: 'Erro na IA.', error: err.message });
@@ -1137,7 +1137,7 @@ Estruture com: Sumário, Relatório (fatos), Fundamentação (análise jurídica
 
     try {
       const ai = getGenAI();
-      const response = await ai.models.generateContent({ model: 'gemini-1.5-flash', contents: prompt });
+      const response = await ai.models.generateContent({ model: 'gemini-3.5-flash', contents: prompt });
       res.json({ success: true, data: { parecer: response.text } });
     } catch (err: any) {
       res.status(500).json({ success: false, message: 'Erro na IA.', error: err.message });
