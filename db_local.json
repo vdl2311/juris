@@ -20,6 +20,12 @@
       "email": "bandavai62@gmail.com",
       "perfil": "Administrador",
       "senha": "SenhaTemporaria123!"
+    },
+    {
+      "id": 5,
+      "nome": "Vidal Teste",
+      "email": "testevidal@gmail.com",
+      "perfil": "Secretária"
     }
   ],
   "clientes": [
@@ -277,6 +283,14 @@
       "acao": "Criar Cliente",
       "detalhes": "Criou o cliente Joaquim Vidal Junior (ID: 5, Tipo: PF)",
       "dataHora": "2026-07-13T10:28:57.731Z"
+    },
+    {
+      "id": 6,
+      "usuarioEmail": "sistema@escritorio.com.br",
+      "usuarioNome": "Sistema",
+      "acao": "Criar Usuário",
+      "detalhes": "Criou o usuário \"Vidal Teste\" (testevidal@gmail.com, Perfil: Secretária)",
+      "dataHora": "2026-07-13T10:39:33.703Z"
     }
   ],
   "integracoes": {
@@ -295,8 +309,8 @@
     "tarefa": 4,
     "honorario": 4,
     "documento": 3,
-    "usuario": 5,
+    "usuario": 6,
     "despesa": 4,
-    "auditoria": 6
+    "auditoria": 7
   }
 }

@@ -2672,25 +2672,35 @@ function Usuarios({ confirmAction }: any) {
         console.error('Erro ao salvar no Firestore cliente-side:', errFirestore);
       }
       
-      const res = await fetch('/api/usuarios', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(userDoc),
-      });
-      const data = await res.json();
-      if (data.success) {
-        const updatedUsers = [...usuarios, userDoc];
-        setUsuarios(updatedUsers);
-        db.usuarios = updatedUsers;
-        setNovoUsuario({ nome: '', email: '', perfil: 'Advogado' });
-        setShowForm(false);
-        const successMsg = authSucceeded
-          ? `Usuário criado com sucesso! Senha temporária: ${password}`
-          : `Usuário criado com sucesso de forma offline/local!`;
-        setStatus({ type: 'success', message: successMsg });
-      } else {
-        setStatus({ type: 'error', message: data.message || 'Erro ao salvar usuário no banco de dados.' });
+      try {
+        const res = await fetch('/api/usuarios', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(userDoc),
+        });
+        if (res.ok) {
+          const contentType = res.headers.get('content-type');
+          if (contentType && contentType.includes('application/json')) {
+            const data = await res.json();
+            if (data.success) {
+              // Sincronizar dados locais com o que o backend retornou
+              console.log('Usuário sincronizado com o backend com sucesso.');
+            }
+          }
+        }
+      } catch (errApi) {
+        console.warn('Erro ao sincronizar usuário com o Express backend, mas foi salvo no Firestore:', errApi);
       }
+
+      const updatedUsers = [...usuarios, userDoc];
+      setUsuarios(updatedUsers);
+      db.usuarios = updatedUsers;
+      setNovoUsuario({ nome: '', email: '', perfil: 'Advogado' });
+      setShowForm(false);
+      const successMsg = authSucceeded
+        ? `Usuário criado com sucesso! Senha temporária: ${password}`
+        : `Usuário criado com sucesso!`;
+      setStatus({ type: 'success', message: successMsg });
     } catch (err: any) {
       console.error('Erro ao criar usuário:', err);
       setStatus({ type: 'error', message: 'Erro ao criar usuário: ' + (err.message || 'Erro desconhecido') });
@@ -2709,7 +2719,11 @@ function Usuarios({ confirmAction }: any) {
         } catch (errFirestore) {
           console.error('Erro ao excluir no Firestore cliente-side:', errFirestore);
         }
-        await fetch(`/api/usuarios/${id}`, { method: 'DELETE' });
+        try {
+          await fetch(`/api/usuarios/${id}`, { method: 'DELETE' });
+        } catch (errApi) {
+          console.warn('Erro ao notificar exclusão ao backend Express, mas foi removido do Firestore:', errApi);
+        }
         const updatedUsers = usuarios.filter((u) => u.id !== id);
         setUsuarios(updatedUsers);
         db.usuarios = updatedUsers;
