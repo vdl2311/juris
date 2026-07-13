@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { db, fmtDate, fmtMoney, clienteNome, usuarioNome, processoLabel, diasRestantes, loadAllDataFromBackend } from './db';
 import {
   Menu, X, LayoutDashboard, Users, FolderKanban, Calendar, CheckSquare,
@@ -74,6 +74,81 @@ export default function App() {
   const [, forceRender] = useState({});
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isLoadingData, setIsLoadingData] = useState(true);
+  const [toasts, setToasts] = useState<any[]>([]);
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [globalSearchQuery, setGlobalSearchQuery] = useState('');
+
+  const showToast = (message: string, type: 'success' | 'error' | 'info' = 'success', action?: { label: string; onClick: () => void }) => {
+    const id = String(Date.now());
+    setToasts((prev) => [...prev, { id, type, message, action }]);
+    setTimeout(() => {
+      setToasts((prev) => prev.filter((t) => t.id !== id));
+    }, action ? 6000 : 4000);
+  };
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        setIsSearchOpen(prev => !prev);
+      }
+      if (e.key === 'Escape') {
+        setIsSearchOpen(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
+  const searchResults = useMemo(() => {
+    if (!globalSearchQuery.trim()) return { clientes: [], processos: [], tarefas: [], modulos: [] };
+    const q = globalSearchQuery.toLowerCase();
+    
+    const modulos = [
+      { id: 'dashboard', label: 'Dashboard', group: 'Visão Geral' },
+      { id: 'clientes', label: 'Clientes', group: 'Gestão' },
+      { id: 'processos', label: 'Processos', group: 'Gestão' },
+      { id: 'agenda', label: 'Agenda Jurídica', group: 'Gestão' },
+      { id: 'tarefas', label: 'Quadro de Tarefas', group: 'Gestão' },
+      { id: 'financeiro', label: 'Financeiro', group: 'Gestão' },
+      { id: 'documentos', label: 'Documentos', group: 'Gestão' },
+      { id: 'inteligencia', label: 'Inteligência Jurídica (Chat)', group: 'IA Jurídica' },
+      { id: 'ia', label: 'IA & Automação', group: 'IA Jurídica' },
+      { id: 'pesquisa', label: 'Pesquisa Jurídica', group: 'IA Jurídica' },
+      { id: 'estrategia', label: 'Estratégia Processual', group: 'IA Jurídica' },
+      { id: 'pecas', label: 'Elaboração de Peças', group: 'IA Jurídica' },
+      { id: 'contratos', label: 'Análise de Contratos', group: 'IA Jurídica' },
+      { id: 'parecer', label: 'Parecer Jurídico', group: 'IA Jurídica' },
+      { id: 'calculos', label: 'Cálculos Jurídicos', group: 'Ferramentas' },
+      { id: 'integracoes', label: 'Integrações', group: 'Administração' },
+      { id: 'portal', label: 'Portal do Cliente', group: 'Administração' },
+      { id: 'relatorios', label: 'Relatórios', group: 'Administração' },
+      { id: 'usuarios', label: 'Usuários', group: 'Administração' },
+      { id: 'auditoria', label: 'Auditoria de Ações', group: 'Administração' },
+    ].filter(m => m.label.toLowerCase().includes(q));
+
+    const clientes = db.clientes.filter(c => c.nome.toLowerCase().includes(q) || c.doc.includes(q)).slice(0, 5);
+    const processos = db.processos.filter(p => p.numero.includes(q) || (p.classe || '').toLowerCase().includes(q)).slice(0, 5);
+    const tarefas = db.tarefas.filter(t => t.titulo.toLowerCase().includes(q) || (t.responsavel || '').toLowerCase().includes(q)).slice(0, 5);
+
+    return { modulos, clientes, processos, tarefas };
+  }, [globalSearchQuery, page]);
+
+  const handleSelectResult = (type: string, id: any) => {
+    setIsSearchOpen(false);
+    setGlobalSearchQuery('');
+    if (type === 'modulo') {
+      setPage(id);
+      setViewingProcesso(null);
+    } else if (type === 'cliente') {
+      setPage('clientes');
+    } else if (type === 'processo') {
+      setPage('processos');
+      setViewingProcesso(id);
+    } else if (type === 'tarefa') {
+      setPage('tarefas');
+    }
+  };
   const [confirmModal, setConfirmModal] = useState<{
     isOpen: boolean;
     title: string;
@@ -160,15 +235,20 @@ export default function App() {
       {/* Mobile Header */}
       <header className="lg:hidden fixed top-0 left-0 right-0 bg-slate-900 text-white h-14 flex items-center justify-between px-4 z-30">
         <div className="flex items-center gap-2">
-          <button onClick={() => setIsSidebarOpen(true)} className="p-1"><Menu size={20} /></button>
+          <button onClick={() => setIsSidebarOpen(true)} className="p-1" aria-label="Abrir menu"><Menu size={20} /></button>
           <span className="font-semibold">Jurídico<span className="text-amber-400">Manager</span></span>
         </div>
-        {notifs.length > 0 && (
-          <button onClick={() => handleNav('dashboard')} className="relative p-1">
-            <Bell size={18} />
-            <span className="absolute -top-1 -right-1 bg-red-600 text-white text-[9px] rounded-full w-4 h-4 flex items-center justify-center font-bold">{notifs.length}</span>
+        <div className="flex items-center gap-2">
+          <button onClick={() => setIsSearchOpen(true)} className="p-2 text-slate-300 hover:text-white" aria-label="Pesquisa rápida">
+            <Search size={18} />
           </button>
-        )}
+          {notifs.length > 0 && (
+            <button onClick={() => handleNav('dashboard')} className="relative p-1" aria-label="Ver notificações">
+              <Bell size={18} />
+              <span className="absolute -top-1 -right-1 bg-red-600 text-white text-[9px] rounded-full w-4 h-4 flex items-center justify-center font-bold">{notifs.length}</span>
+            </button>
+          )}
+        </div>
       </header>
 
       {/* Mobile Sidebar */}
@@ -178,7 +258,16 @@ export default function App() {
           <div className="absolute left-0 top-0 h-full w-72 bg-slate-900 text-slate-200 flex flex-col">
             <div className="p-4 border-b border-white/10 flex items-center justify-between">
               <span className="font-semibold text-white">Jurídico<span className="text-amber-400">Manager</span></span>
-              <button onClick={() => setIsSidebarOpen(false)} className="p-1"><X size={20} /></button>
+              <button onClick={() => setIsSidebarOpen(false)} className="p-1" aria-label="Fechar menu"><X size={20} /></button>
+            </div>
+            <div className="px-4 py-3 border-b border-white/10">
+              <button
+                onClick={() => { setIsSidebarOpen(false); setIsSearchOpen(true); }}
+                className="w-full flex items-center gap-2 px-3 py-2 text-xs text-slate-400 bg-white/5 border border-white/10 rounded-lg hover:bg-white/10 hover:text-white transition cursor-pointer"
+              >
+                <Search size={14} />
+                <span>Buscar...</span>
+              </button>
             </div>
             <SidebarContent perm={perm} page={page} handleNav={handleNav} notifs={notifs} />
             <UserFooter usuarioAtual={usuarioAtual} setUsuarioAtual={setUsuarioAtual} setPage={setPage} />
@@ -187,10 +276,19 @@ export default function App() {
       )}
 
       {/* Desktop Sidebar */}
-      <div className="hidden lg:flex w-64 bg-slate-900 text-slate-200 flex-col shrink-0">
+      <div className="hidden lg:flex w-64 bg-slate-900 text-slate-200 flex-col shrink-0 border-r border-white/5">
         <div className="px-5 py-5 border-b border-white/10 flex items-center gap-2">
           <Scale className="w-6 h-6 text-amber-400" />
           <span className="font-semibold text-white text-base">Jurídico<span className="text-amber-400">Manager</span></span>
+        </div>
+        <div className="px-4 py-3 border-b border-white/10">
+          <button
+            onClick={() => setIsSearchOpen(true)}
+            className="w-full flex items-center gap-2 px-3 py-2 text-xs text-slate-400 bg-white/5 border border-white/10 rounded-lg hover:bg-white/10 hover:text-white transition cursor-pointer"
+          >
+            <Search size={14} />
+            <span>Buscar (Ctrl+K)...</span>
+          </button>
         </div>
         <button onClick={() => handleNav('dashboard')} className="px-5 py-3 text-sm text-slate-300 hover:bg-white/5 flex items-center gap-2 border-b border-white/10">
           <Bell size={16} />
@@ -213,10 +311,10 @@ export default function App() {
         ) : (
           <>
             {page === 'dashboard' && <Dashboard />}
-            {page === 'clientes' && <Clientes setModal={setModal} update={update} confirmAction={confirmAction} />}
+            {page === 'clientes' && <Clientes setModal={setModal} update={update} confirmAction={confirmAction} showToast={showToast} />}
             {page === 'processos' && (viewingProcesso ? <ProcessoDetalhe id={viewingProcesso} setViewingProcesso={setViewingProcesso} update={update} /> : <Processos setViewingProcesso={setViewingProcesso} setModal={setModal} update={update} confirmAction={confirmAction} />)}
             {page === 'agenda' && <Agenda setModal={setModal} update={update} confirmAction={confirmAction} />}
-            {page === 'tarefas' && <Tarefas setModal={setModal} update={update} confirmAction={confirmAction} />}
+            {page === 'tarefas' && <Tarefas setModal={setModal} update={update} confirmAction={confirmAction} showToast={showToast} />}
             {page === 'financeiro' && <Financeiro setModal={setModal} update={update} confirmAction={confirmAction} />}
             {page === 'documentos' && <Documentos setModal={setModal} update={update} confirmAction={confirmAction} />}
             {page === 'inteligencia' && <InteligenciaJuridica />}
@@ -318,6 +416,176 @@ export default function App() {
           </div>
         </div>
       )}
+
+      {/* Busca Global (Cmd+K) Modal */}
+      {isSearchOpen && (
+        <div className="fixed inset-0 bg-black/60 flex items-start justify-center z-[150] p-4 pt-16 sm:pt-28 pointer-events-auto">
+          <div className="bg-white rounded-xl shadow-2xl border border-slate-100 overflow-hidden w-full max-w-lg animate-fade-in pointer-events-auto">
+            {/* Input de Busca */}
+            <div className="p-4 border-b border-slate-100 flex items-center gap-3">
+              <Search className="text-slate-400 w-5 h-5 shrink-0" />
+              <input
+                autoFocus
+                type="text"
+                placeholder="Busque por módulos, clientes, processos, tarefas..."
+                className="w-full text-base bg-transparent text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-0"
+                value={globalSearchQuery}
+                onChange={(e) => setGlobalSearchQuery(e.target.value)}
+              />
+              <button
+                onClick={() => setIsSearchOpen(false)}
+                className="text-xs font-semibold text-slate-400 hover:text-slate-600 bg-slate-100 hover:bg-slate-200 px-2 py-1 rounded transition-colors cursor-pointer"
+              >
+                ESC
+              </button>
+            </div>
+
+            {/* Resultados */}
+            <div className="max-h-[350px] overflow-y-auto custom-scroll p-2 space-y-4">
+              {!globalSearchQuery.trim() ? (
+                <div className="p-8 text-center text-slate-400 text-xs">
+                  Digite algo para buscar no JurisManager...
+                </div>
+              ) : (
+                <>
+                  {/* Módulos */}
+                  {searchResults.modulos.length > 0 && (
+                    <div>
+                      <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-3 mb-1">Módulos</h4>
+                      <div className="space-y-0.5">
+                        {searchResults.modulos.map((m) => (
+                          <button
+                            key={m.id}
+                            type="button"
+                            onClick={() => handleSelectResult('modulo', m.id)}
+                            className="w-full text-left px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 hover:text-slate-900 rounded-lg flex items-center justify-between transition-colors cursor-pointer"
+                          >
+                            <span>{m.label}</span>
+                            <span className="text-[10px] bg-slate-100 px-1.5 py-0.5 rounded text-slate-500 font-semibold">{m.group}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Clientes */}
+                  {searchResults.clientes.length > 0 && (
+                    <div>
+                      <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-3 mb-1">Clientes</h4>
+                      <div className="space-y-0.5">
+                        {searchResults.clientes.map((c) => (
+                          <button
+                            key={c.id}
+                            type="button"
+                            onClick={() => handleSelectResult('cliente', c.id)}
+                            className="w-full text-left px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 hover:text-slate-900 rounded-lg flex flex-col transition-colors cursor-pointer"
+                          >
+                            <span className="font-semibold">{c.nome}</span>
+                            <span className="text-[10px] text-slate-400 font-mono">{c.doc} - {c.contato}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Processos */}
+                  {searchResults.processos.length > 0 && (
+                    <div>
+                      <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-3 mb-1">Processos</h4>
+                      <div className="space-y-0.5">
+                        {searchResults.processos.map((p) => (
+                          <button
+                            key={p.id}
+                            type="button"
+                            onClick={() => handleSelectResult('processo', p.id)}
+                            className="w-full text-left px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 hover:text-slate-900 rounded-lg flex flex-col transition-colors cursor-pointer"
+                          >
+                            <span className="font-semibold font-mono text-slate-800">{p.numero}</span>
+                            <span className="text-[10px] text-slate-400 uppercase font-bold">{p.tribunal} - {p.classe}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Tarefas */}
+                  {searchResults.tarefas.length > 0 && (
+                    <div>
+                      <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-3 mb-1">Tarefas</h4>
+                      <div className="space-y-0.5">
+                        {searchResults.tarefas.map((t) => (
+                          <button
+                            key={t.id}
+                            type="button"
+                            onClick={() => handleSelectResult('tarefa', t.id)}
+                            className="w-full text-left px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 hover:text-slate-900 rounded-lg flex flex-col transition-colors cursor-pointer"
+                          >
+                            <span className="font-semibold">{t.titulo}</span>
+                            <span className="text-[10px] text-slate-400">Responsável: {t.responsavel}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {searchResults.modulos.length === 0 &&
+                   searchResults.clientes.length === 0 &&
+                   searchResults.processos.length === 0 &&
+                   searchResults.tarefas.length === 0 && (
+                    <div className="p-8 text-center text-slate-400 text-xs">
+                      Nenhum resultado encontrado para "{globalSearchQuery}"
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+            
+            {/* Rodapé do Modal */}
+            <div className="p-3 bg-slate-50 border-t border-slate-100 flex items-center justify-between text-[10px] text-slate-400">
+              <span>Use as setas ou clique para navegar</span>
+              <span>Pressione <span className="bg-slate-200 px-1 rounded font-semibold text-slate-500">ESC</span> para fechar</span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Container de Toasts flutuantes */}
+      <div className="fixed bottom-4 right-4 z-[150] flex flex-col gap-2 max-w-sm w-full pointer-events-none">
+        {toasts.map((t) => (
+          <div
+            key={t.id}
+            className={`p-3 rounded-lg shadow-lg flex items-center justify-between gap-3 text-sm pointer-events-auto border transition-all duration-300 animate-fade-in ${
+              t.type === 'success'
+                ? 'bg-emerald-600 text-white border-emerald-500'
+                : t.type === 'error'
+                ? 'bg-red-600 text-white border-red-500'
+                : 'bg-slate-800 text-white border-slate-700'
+            }`}
+          >
+            <div className="flex-1">{t.message}</div>
+            {t.action && (
+              <button
+                type="button"
+                onClick={() => {
+                  t.action.onClick();
+                  setToasts((prev) => prev.filter((toast) => toast.id !== t.id));
+                }}
+                className="bg-white/20 hover:bg-white/30 text-white text-xs font-bold px-2.5 py-1 rounded transition-colors cursor-pointer"
+              >
+                {t.action.label}
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => setToasts((prev) => prev.filter((toast) => toast.id !== t.id))}
+              className="text-white/70 hover:text-white"
+              aria-label="Fechar"
+            >
+              <X size={14} />
+            </button>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -364,44 +632,25 @@ function LoginScreen({ onLogin }: { onLogin: (u: any) => void }) {
 
     try {
       setLoading(true);
-      let userCredential = null;
-      let fallbackLocal = false;
+      let usuarioCompativel: any = null;
+      let loginEfetuado = false;
 
       try {
-        userCredential = await signInWithEmailAndPassword(auth, emailDigitado, senhaDigitada);
-      } catch (authErr: any) {
-        console.warn('Erro ao autenticar pelo Firebase Auth. Tentando contingência local...', authErr);
+        const userCredential = await signInWithEmailAndPassword(auth, emailDigitado, senhaDigitada);
         
-        const usuarioCompativel = usuariosLocais.find(
-          (u) => (u.email || '').toLowerCase() === emailDigitado.toLowerCase()
-        );
-
-        // Se houver qualquer erro do Firebase (rede, api desativada, etc) e o usuário existe localmente, fazemos o login local.
-        if (usuarioCompativel) {
-          fallbackLocal = true;
-          console.log('[FALLBACK] Efetuando login local via contingência para:', emailDigitado);
-        } else {
-          // Se o usuário não existe localmente, repassamos o erro original
-          throw authErr;
+        // Criar um objeto de usuário compatível com o resto da aplicação
+        usuarioCompativel = usuariosLocais.find((u) => (u.email || '').toLowerCase() === emailDigitado.toLowerCase());
+        if (!usuarioCompativel) {
+          const emailLower = emailDigitado.toLowerCase();
+          usuarioCompativel = {
+            id: Date.now(),
+            nome: emailDigitado.split('@')[0],
+            email: emailDigitado,
+            perfil: (emailLower === 'vidal2311usa@gmail.com' || emailLower === 'bandavai62@gmail.com') ? 'Administrador' : 'Advogado'
+          };
         }
-      }
-      
-      // Criar um objeto de usuário compatível com o resto da aplicação
-      let usuarioCompativel = usuariosLocais.find((u) => (u.email || '').toLowerCase() === emailDigitado.toLowerCase());
-      if (!usuarioCompativel) {
-        const emailLower = emailDigitado.toLowerCase();
-        usuarioCompativel = {
-          id: Date.now(),
-          nome: emailDigitado.split('@')[0],
-          email: emailDigitado,
-          perfil: (emailLower === 'vidal2311usa@gmail.com' || emailLower === 'bandavai62@gmail.com') ? 'Administrador' : 'Advogado'
-        };
-      } else if (emailDigitado.toLowerCase() === 'vidal2311usa@gmail.com' || emailDigitado.toLowerCase() === 'bandavai62@gmail.com') {
-        usuarioCompativel.perfil = 'Administrador';
-      }
 
-      // Garantir que o usuário está no Firestore do cliente
-      if (!fallbackLocal) {
+        // Garantir que o usuário está no Firestore do cliente
         try {
           const { doc, setDoc, getDoc } = await import('firebase/firestore');
           const { firestore } = await import('./firebase');
@@ -409,13 +658,42 @@ function LoginScreen({ onLogin }: { onLogin: (u: any) => void }) {
           const userDocSnap = await getDoc(userDocRef);
           if (!userDocSnap.exists()) {
             await setDoc(userDocRef, usuarioCompativel);
+          } else {
+            // Se o usuário existe no banco, confiamos no perfil do banco de dados (reforço contra P-002)
+            usuarioCompativel = userDocSnap.data();
           }
         } catch (errDb) {
           console.error('Erro ao salvar usuário logado no Firestore:', errDb);
         }
+        loginEfetuado = true;
+      } catch (authErr: any) {
+        console.warn('Erro ao autenticar pelo Firebase Auth. Tentando contingência local com validação de senha...', authErr);
+        
+        // Se houver erro de rede ou falha de conexão com Firebase (ex: network-request-failed),
+        // ou se for outro erro do Firebase que impossibilite o login mas o usuário exista localmente,
+        // tentamos autenticação local validando a senha contra a cadastrada localmente para segurança (P-003).
+        const localUser = usuariosLocais.find((u) => (u.email || '').toLowerCase() === emailDigitado.toLowerCase());
+        if (localUser) {
+          const localSenhaEsperada = localUser.senha || 'SenhaTemporaria123!';
+          if (senhaDigitada === localSenhaEsperada) {
+            usuarioCompativel = localUser;
+            loginEfetuado = true;
+            console.log('[FALLBACK SEGURO] Login local efetuado com sucesso (senha validada) para:', emailDigitado);
+          } else {
+            // Senha incorreta localmente
+            setLoginError('E-mail ou senha incorretos.');
+            setLoading(false);
+            return;
+          }
+        } else {
+          // Se não houver correspondência local, repassamos o erro original
+          throw authErr;
+        }
       }
-      
-      onLogin(usuarioCompativel);
+
+      if (loginEfetuado && usuarioCompativel) {
+        onLogin(usuarioCompativel);
+      }
     } catch (err: any) {
       console.error('Erro de login:', err);
       if (err.code === 'auth/invalid-credential' || err.code === 'auth/wrong-password' || err.code === 'auth/user-not-found') {
@@ -592,6 +870,35 @@ function LoginScreen({ onLogin }: { onLogin: (u: any) => void }) {
   );
 }
 
+// ============ EMPTY STATE COMPONENT ============
+interface EmptyStateProps {
+  icon: any;
+  title: string;
+  description: string;
+  actionLabel?: string;
+  onAction?: () => void;
+}
+
+function EmptyState({ icon: Icon, title, description, actionLabel, onAction }: EmptyStateProps) {
+  return (
+    <div className="flex flex-col items-center justify-center text-center p-8 bg-white border border-dashed border-slate-300 rounded-xl max-w-md mx-auto my-6 animate-fade-in shadow-sm">
+      <div className="p-3 bg-amber-50 text-amber-600 rounded-full mb-3">
+        <Icon size={24} />
+      </div>
+      <h3 className="text-sm font-semibold text-slate-800 mb-1">{title}</h3>
+      <p className="text-xs text-slate-500 mb-4 max-w-[280px]">{description}</p>
+      {actionLabel && onAction && (
+        <button
+          onClick={onAction}
+          className="bg-slate-800 text-white hover:bg-slate-700 text-xs px-3 py-1.5 rounded-lg font-medium transition cursor-pointer"
+        >
+          {actionLabel}
+        </button>
+      )}
+    </div>
+  );
+}
+
 // ============ SIDEBAR ============
 function SidebarContent({ perm, page, handleNav, notifs }: any) {
   return (
@@ -733,7 +1040,7 @@ function Dashboard() {
 }
 
 // ============ CLIENTES ============
-function Clientes({ setModal, update, confirmAction }: any) {
+function Clientes({ setModal, update, confirmAction, showToast }: any) {
   const [search, setSearch] = useState('');
   const filtered = db.clientes.filter((c) =>
     c.nome.toLowerCase().includes(search.toLowerCase()) || c.doc.includes(search) || c.contato.includes(search)
@@ -744,15 +1051,37 @@ function Clientes({ setModal, update, confirmAction }: any) {
       'Excluir Cliente',
       'Deseja realmente excluir este cliente? Todos os dados associados serão mantidos, mas o cadastro do cliente será removido.',
       async () => {
-        try {
-          const res = await fetch(`/api/clientes/${id}`, { method: 'DELETE' });
-          if (res.ok) {
-            db.clientes = db.clientes.filter((c) => c.id !== id);
-            update();
+        const clienteExcluido = db.clientes.find(c => c.id === id);
+        if (!clienteExcluido) return;
+
+        // Remover temporariamente do estado local
+        db.clientes = db.clientes.filter((c) => c.id !== id);
+        update();
+
+        let undoClicked = false;
+
+        // Timer para exclusão definitiva no backend
+        const timeoutId = setTimeout(async () => {
+          if (!undoClicked) {
+            try {
+              await fetch(`/api/clientes/${id}`, { method: 'DELETE' });
+            } catch (err) {
+              console.error('Erro ao excluir cliente no backend:', err);
+            }
           }
-        } catch (err) {
-          console.error('Erro ao excluir cliente:', err);
-        }
+        }, 5000);
+
+        showToast('Cliente excluído com sucesso.', 'info', {
+          label: 'Desfazer',
+          onClick: () => {
+            undoClicked = true;
+            clearTimeout(timeoutId);
+            // Restaurar localmente
+            db.clientes.push(clienteExcluido);
+            update();
+            showToast('Exclusão desfeita com sucesso.', 'success');
+          }
+        });
       }
     );
   };
@@ -799,7 +1128,7 @@ function Clientes({ setModal, update, confirmAction }: any) {
                 <td className="px-4 py-3 text-right">
                   <button
                     onClick={() => deleteCliente(c.id)}
-                    className="p-1 hover:bg-red-50 text-slate-400 hover:text-red-600 rounded transition inline-flex items-center justify-center"
+                    className="p-1 hover:bg-red-50 text-slate-400 hover:text-red-600 rounded transition inline-flex items-center justify-center cursor-pointer"
                     title="Excluir"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
@@ -807,7 +1136,19 @@ function Clientes({ setModal, update, confirmAction }: any) {
                 </td>
               </tr>
             ))}
-            {filtered.length === 0 && <tr><td colSpan={5} className="text-center text-slate-400 py-8">Nenhum cliente</td></tr>}
+            {filtered.length === 0 && (
+              <tr>
+                <td colSpan={5} className="py-4">
+                  <EmptyState
+                    icon={Users}
+                    title="Nenhum cliente cadastrado"
+                    description="Comece adicionando seu primeiro cliente para gerenciar seus processos de forma unificada."
+                    actionLabel="+ Novo Cliente"
+                    onAction={() => setModal('novo-cliente')}
+                  />
+                </td>
+              </tr>
+            )}
           </tbody>
         </table>
       </div>
@@ -913,7 +1254,19 @@ function Processos({ setViewingProcesso, setModal, update, confirmAction }: any)
                 </td>
               </tr>
             ))}
-            {filtered.length === 0 && <tr><td colSpan={5} className="text-center text-slate-400 py-8">Nenhum processo</td></tr>}
+            {filtered.length === 0 && (
+              <tr>
+                <td colSpan={5} className="py-4">
+                  <EmptyState
+                    icon={FolderKanban}
+                    title="Nenhum processo cadastrado"
+                    description="Gerencie os processos de seus clientes, andamentos judiciais e datas críticas."
+                    actionLabel="+ Novo Processo"
+                    onAction={() => setModal('novo-processo')}
+                  />
+                </td>
+              </tr>
+            )}
           </tbody>
         </table>
       </div>
@@ -1068,7 +1421,19 @@ function Agenda({ setModal, update, confirmAction }: any) {
                 </tr>
               );
             })}
-            {eventos.length === 0 && <tr><td colSpan={6} className="text-center text-slate-400 py-8">Nenhum evento</td></tr>}
+            {eventos.length === 0 && (
+              <tr>
+                <td colSpan={6} className="py-4">
+                  <EmptyState
+                    icon={Calendar}
+                    title="Nenhum compromisso agendado"
+                    description="Mantenha seus prazos, audiências e reuniões do escritório sempre sob controle."
+                    actionLabel="+ Novo Compromisso"
+                    onAction={() => setModal('novo-evento')}
+                  />
+                </td>
+              </tr>
+            )}
           </tbody>
         </table>
       </div>
@@ -1077,7 +1442,7 @@ function Agenda({ setModal, update, confirmAction }: any) {
 }
 
 // ============ TAREFAS (KANBAN) ============
-function Tarefas({ setModal, update, confirmAction }: any) {
+function Tarefas({ setModal, update, confirmAction, showToast }: any) {
   const cols = [
     { key: 'pendente', label: 'Pendente', bg: 'bg-slate-50' },
     { key: 'andamento', label: 'Em Andamento', bg: 'bg-blue-50' },
@@ -1107,13 +1472,37 @@ function Tarefas({ setModal, update, confirmAction }: any) {
       'Excluir Tarefa',
       'Deseja realmente excluir esta tarefa do quadro?',
       async () => {
+        const tarefaExcluida = db.tarefas.find(t => t.id === id);
+        if (!tarefaExcluida) return;
+
+        // Remover temporariamente do estado local
         db.tarefas = db.tarefas.filter((t) => t.id !== id);
         update();
-        try {
-          await fetch(`/api/tarefas/${id}`, { method: 'DELETE' });
-        } catch (err) {
-          console.error('Erro ao excluir tarefa:', err);
-        }
+
+        let undoClicked = false;
+
+        // Timer para exclusão definitiva no backend
+        const timeoutId = setTimeout(async () => {
+          if (!undoClicked) {
+            try {
+              await fetch(`/api/tarefas/${id}`, { method: 'DELETE' });
+            } catch (err) {
+              console.error('Erro ao excluir tarefa no backend:', err);
+            }
+          }
+        }, 5000);
+
+        showToast('Tarefa excluída com sucesso.', 'info', {
+          label: 'Desfazer',
+          onClick: () => {
+            undoClicked = true;
+            clearTimeout(timeoutId);
+            // Restaurar localmente
+            db.tarefas.push(tarefaExcluida);
+            update();
+            showToast('Exclusão desfeita com sucesso.', 'success');
+          }
+        });
       }
     );
   };
@@ -1336,7 +1725,15 @@ function Financeiro({ setModal, update, confirmAction }: any) {
               ))}
               {db.honorarios.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="text-center text-slate-400 py-8">Nenhum honorário cadastrado.</td>
+                  <td colSpan={6} className="py-4">
+                    <EmptyState
+                      icon={DollarSign}
+                      title="Nenhum honorário lançado"
+                      description="Registre as cobranças, parcelas e honorários contratuais de seus clientes."
+                      actionLabel="+ Lançar Honorário"
+                      onAction={() => setModal('novo-honorario')}
+                    />
+                  </td>
                 </tr>
               )}
             </tbody>
@@ -1388,7 +1785,15 @@ function Financeiro({ setModal, update, confirmAction }: any) {
               ))}
               {db.despesas.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="text-center text-slate-400 py-8">Nenhuma despesa cadastrada.</td>
+                  <td colSpan={5} className="py-4">
+                    <EmptyState
+                      icon={DollarSign}
+                      title="Nenhuma despesa registrada"
+                      description="Controle os custos do escritório, taxas judiciais e despesas reembolsáveis."
+                      actionLabel="+ Lançar Despesa"
+                      onAction={() => setModal('nova-despesa')}
+                    />
+                  </td>
                 </tr>
               )}
             </tbody>
@@ -1461,7 +1866,15 @@ function Documentos({ setModal, update, confirmAction }: any) {
             ))}
             {db.documentos.length === 0 && (
               <tr>
-                <td colSpan={5} className="text-center text-slate-400 py-8">Nenhum documento cadastrado.</td>
+                <td colSpan={5} className="py-4">
+                  <EmptyState
+                    icon={FileText}
+                    title="Nenhum documento anexado"
+                    description="Faça a gestão dos arquivos, contratos, procurações e peças processuais."
+                    actionLabel="+ Anexar Documento"
+                    onAction={() => setModal('novo-documento')}
+                  />
+                </td>
               </tr>
             )}
           </tbody>
@@ -2212,7 +2625,23 @@ function Usuarios({ confirmAction }: any) {
     if (!novoUsuario.nome || !novoUsuario.email) return;
     setStatus(null);
     try {
-      const password = 'SenhaTemporaria123!';
+      const generateSecurePassword = () => {
+        const chars = 'abcdefghijklmnopqrstuvwxyz';
+        const upper = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+        const nums = '0123456789';
+        const specials = '!@#$%&*';
+        let pass = '';
+        pass += upper[Math.floor(Math.random() * upper.length)];
+        pass += nums[Math.floor(Math.random() * nums.length)];
+        pass += specials[Math.floor(Math.random() * specials.length)];
+        const all = chars + upper + nums + specials;
+        for (let i = 0; i < 9; i++) {
+          pass += all[Math.floor(Math.random() * all.length)];
+        }
+        return pass.split('').sort(() => 0.5 - Math.random()).join('');
+      };
+      
+      const password = generateSecurePassword();
       let authSucceeded = false;
       try {
         // Criar o usuário no Firebase Auth usando uma instância secundária para não deslogar o admin

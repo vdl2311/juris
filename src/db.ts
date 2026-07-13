@@ -2,9 +2,9 @@
 
 export const db = {
   usuarios: [
-    { id: 1, nome: 'Administrador Vidal', email: 'vidal2311usa@gmail.com', perfil: 'Administrador' },
-    { id: 5, nome: 'Cria2311', email: 'cria2311@gmail.com', perfil: 'Advogado' },
-    { id: 6, nome: 'BandaVai', email: 'bandavai62@gmail.com', perfil: 'Administrador' }
+    { id: 1, nome: 'Administrador Vidal', email: 'vidal2311usa@gmail.com', perfil: 'Administrador', senha: 'SenhaTemporaria123!' },
+    { id: 5, nome: 'Cria2311', email: 'cria2311@gmail.com', perfil: 'Advogado', senha: 'SenhaTemporaria123!' },
+    { id: 6, nome: 'BandaVai', email: 'bandavai62@gmail.com', perfil: 'Administrador', senha: 'SenhaTemporaria123!' }
   ],
   auditoria: [] as any[],
   clientes: [

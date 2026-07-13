@@ -1,0 +1,284 @@
+{
+  "usuarios": [
+    {
+      "id": 1,
+      "nome": "Administrador Vidal",
+      "email": "vidal2311usa@gmail.com",
+      "perfil": "Administrador",
+      "senha": "SenhaTemporaria123!"
+    },
+    {
+      "id": 5,
+      "nome": "Cria2311",
+      "email": "cria2311@gmail.com",
+      "perfil": "Advogado",
+      "senha": "SenhaTemporaria123!"
+    },
+    {
+      "id": 6,
+      "nome": "BandaVai",
+      "email": "bandavai62@gmail.com",
+      "perfil": "Administrador",
+      "senha": "SenhaTemporaria123!"
+    }
+  ],
+  "clientes": [
+    {
+      "id": 1,
+      "tipo": "PF",
+      "nome": "João Pedro Almeida",
+      "doc": "123.456.789-00",
+      "contato": "(31) 99888-1122",
+      "email": "joao@email.com",
+      "endereco": "Ipatinga - MG"
+    },
+    {
+      "id": 2,
+      "tipo": "PJ",
+      "nome": "Metalúrgica Vale Ltda",
+      "doc": "12.345.678/0001-90",
+      "contato": "(31) 3333-4455",
+      "email": "contato@vale.com.br",
+      "endereco": "Coronel Fabriciano - MG"
+    },
+    {
+      "id": 3,
+      "tipo": "PF",
+      "nome": "Marta Oliveira Costa",
+      "doc": "987.654.321-00",
+      "contato": "(31) 98877-6655",
+      "email": "marta@email.com",
+      "endereco": "Timóteo - MG"
+    },
+    {
+      "id": 4,
+      "tipo": "PF",
+      "nome": "Joaquim Vidal Junior",
+      "doc": "062.149.456-99",
+      "contato": "(31) 9875-3676",
+      "email": "vidal2311usa@gmail.com",
+      "endereco": "Av Alberto Geovanini 187\nAP 302",
+      "created_at": "2026-07-13"
+    }
+  ],
+  "processos": [
+    {
+      "id": 1,
+      "numero": "0001234-56.2025.8.13.0313",
+      "tribunal": "TJMG",
+      "vara": "2ª Vara Cível",
+      "classe": "Ação de Cobrança",
+      "assunto": "Inadimplência contratual",
+      "clienteId": 1,
+      "advogadoId": 2,
+      "status": "ativo",
+      "valorCausa": 18500,
+      "andamentos": [
+        {
+          "data": "2026-06-10",
+          "desc": "Petição inicial protocolada"
+        },
+        {
+          "data": "2026-06-25",
+          "desc": "Citação da parte ré"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "numero": "0007788-12.2024.8.13.0313",
+      "tribunal": "TJMG",
+      "vara": "1ª Vara do Trabalho",
+      "classe": "Reclamação Trabalhista",
+      "assunto": "Horas extras",
+      "clienteId": 2,
+      "advogadoId": 2,
+      "status": "ativo",
+      "valorCausa": 42000,
+      "andamentos": [
+        {
+          "data": "2026-05-02",
+          "desc": "Audiência realizada"
+        },
+        {
+          "data": "2026-06-30",
+          "desc": "Aguardando sentença"
+        }
+      ]
+    }
+  ],
+  "eventos": [
+    {
+      "id": 1,
+      "tipo": "Audiência",
+      "processoId": 2,
+      "data": "2026-07-15",
+      "hora": "14:00",
+      "local": "Fórum de Timóteo - Sala 3"
+    },
+    {
+      "id": 2,
+      "tipo": "Prazo",
+      "processoId": 1,
+      "data": "2026-07-14",
+      "hora": "23:59",
+      "local": "Contestação"
+    },
+    {
+      "id": 3,
+      "tipo": "Reunião",
+      "processoId": 1,
+      "data": "2026-07-18",
+      "hora": "10:00",
+      "local": "Escritório"
+    }
+  ],
+  "tarefas": [
+    {
+      "id": 1,
+      "titulo": "Elaborar contestação",
+      "responsavelId": 2,
+      "processoId": 1,
+      "prioridade": "alta",
+      "status": "pendente",
+      "prazo": "2026-07-14"
+    },
+    {
+      "id": 2,
+      "titulo": "Levantar jurisprudência TST",
+      "responsavelId": 3,
+      "processoId": 2,
+      "prioridade": "media",
+      "status": "andamento",
+      "prazo": "2026-07-17"
+    },
+    {
+      "id": 3,
+      "titulo": "Organizar documentos",
+      "responsavelId": 4,
+      "processoId": null,
+      "prioridade": "baixa",
+      "status": "pendente",
+      "prazo": "2026-07-20"
+    }
+  ],
+  "honorarios": [
+    {
+      "id": 1,
+      "processoId": 1,
+      "clienteId": 1,
+      "valor": 3500,
+      "tipo": "fixo",
+      "status": "pendente",
+      "vencimento": "2026-07-19"
+    },
+    {
+      "id": 2,
+      "processoId": 2,
+      "clienteId": 2,
+      "valor": 8000,
+      "tipo": "exito",
+      "status": "pago",
+      "vencimento": "2026-07-03"
+    },
+    {
+      "id": 3,
+      "processoId": 3,
+      "clienteId": 3,
+      "valor": 1200,
+      "tipo": "fixo",
+      "status": "atrasado",
+      "vencimento": "2026-06-28"
+    }
+  ],
+  "despesas": [
+    {
+      "id": 1,
+      "descricao": "Aluguel do escritório",
+      "valor": 2800,
+      "vencimento": "2026-07-16",
+      "status": "pendente"
+    },
+    {
+      "id": 3,
+      "descricao": "Água ",
+      "valor": 278,
+      "vencimento": "2026-07-24",
+      "status": "pendente"
+    }
+  ],
+  "documentos": [
+    {
+      "id": 1,
+      "nome": "Contrato de honorários - João Pedro.pdf",
+      "clienteId": 1,
+      "processoId": 1,
+      "data": "2026-06-23",
+      "assinatura": "assinado",
+      "origem": "upload"
+    },
+    {
+      "id": 2,
+      "nome": "Procuração - Metalúrgica Vale.pdf",
+      "clienteId": 2,
+      "processoId": 2,
+      "data": "2026-06-03",
+      "assinatura": "pendente",
+      "origem": "upload"
+    }
+  ],
+  "auditoria": [
+    {
+      "id": 1,
+      "usuarioEmail": "vidal2311usa@gmail.com",
+      "usuarioNome": "Administrador",
+      "acao": "Criar Cliente",
+      "detalhes": "Criou o cliente Joaquim Vidal Junior (ID: 4, Tipo: PF)",
+      "dataHora": "2026-07-13T09:10:10.033Z"
+    },
+    {
+      "id": 2,
+      "usuarioEmail": "vidal2311usa@gmail.com",
+      "usuarioNome": "Administrador",
+      "acao": "Deletar Processo",
+      "detalhes": "Excluiu o processo nº 0003321-77.2023.8.13.0313 (ID: 3)",
+      "dataHora": "2026-07-13T09:10:46.255Z"
+    },
+    {
+      "id": 3,
+      "usuarioEmail": "vidal2311usa@gmail.com",
+      "usuarioNome": "Administrador",
+      "acao": "Criar Despesa",
+      "detalhes": "Criou a despesa \"Água \" no valor de R$ 278",
+      "dataHora": "2026-07-13T09:11:35.001Z"
+    },
+    {
+      "id": 4,
+      "usuarioEmail": "vidal2311usa@gmail.com",
+      "usuarioNome": "Administrador",
+      "acao": "Deletar Despesa",
+      "detalhes": "Excluiu a despesa \"Custas processuais\" (ID: 2)",
+      "dataHora": "2026-07-13T09:11:46.151Z"
+    }
+  ],
+  "integracoes": {
+    "whatsapp": true,
+    "email": true,
+    "tribunal": true,
+    "ocr": true,
+    "assinatura": true,
+    "ultimoBackup": "2026-07-13T05:42:49.806Z",
+    "ultimaSincroniaTribunal": "2026-07-12T12:42:49.806Z"
+  },
+  "nextId": {
+    "cliente": 5,
+    "processo": 4,
+    "evento": 4,
+    "tarefa": 4,
+    "honorario": 4,
+    "documento": 3,
+    "usuario": 5,
+    "despesa": 4,
+    "auditoria": 5
+  }
+}
