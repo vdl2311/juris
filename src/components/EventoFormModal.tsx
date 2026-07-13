@@ -43,8 +43,29 @@ export default function EventoFormModal({ processos, onClose, onSuccess }: Event
       } else {
         setError(json.message || 'Erro ao salvar evento.');
       }
-    } catch (err) {
-      setError('Erro de conexão com o servidor.');
+    } catch (err: any) {
+      console.warn('[EVENTO FALLBACK] Erro de conexão com o backend. Salvando diretamente no Firestore...', err);
+      try {
+        const { doc: fireDoc, setDoc } = await import('firebase/firestore');
+        const { firestore } = await import('../firebase');
+
+        const newEvent = {
+          id: Date.now(),
+          tipo,
+          processoId: processoId ? parseInt(processoId) : null,
+          data,
+          hora,
+          local,
+        };
+
+        const eventDocRef = fireDoc(firestore, 'eventos', String(newEvent.id));
+        await setDoc(eventDocRef, newEvent);
+
+        onSuccess(newEvent);
+      } catch (firestoreErr: any) {
+        console.error('[EVENTO FALLBACK CRÍTICO] Erro ao salvar diretamente no Firestore:', firestoreErr);
+        setError('Erro de conexão ao salvar.');
+      }
     } finally {
       setLoading(false);
     }

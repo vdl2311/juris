@@ -83,9 +83,11 @@ export function diasRestantes(iso: string): number {
 }
 
 export async function loadAllDataFromBackend() {
+  let loadedFromBackend = false;
   try {
     const fetchCollection = async (path: string) => {
       const res = await fetch(path);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const json = await res.json();
       return json.success ? json.data : [];
     };
@@ -100,7 +102,10 @@ export async function loadAllDataFromBackend() {
       fetchCollection('/api/documentos'),
       fetchCollection('/api/usuarios'),
       fetchCollection('/api/auditoria'),
-      fetch('/api/integracoes').then(res => res.json()).catch(() => null),
+      fetch('/api/integracoes').then(res => {
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return res.json();
+      }).catch(() => null),
     ]);
 
     db.clientes = clientes;
@@ -115,7 +120,59 @@ export async function loadAllDataFromBackend() {
     if (integracoesRes && integracoesRes.success && integracoesRes.data) {
       db.integracoes = integracoesRes.data;
     }
+    loadedFromBackend = true;
+    console.log('[DB] Dados carregados com sucesso do backend Express.');
   } catch (err) {
-    console.error('Erro ao carregar dados do backend:', err);
+    console.warn('[DB] Erro ao carregar dados do backend Express, tentando carregar diretamente do Firestore:', err);
+  }
+
+  // Fallback: carregar diretamente do Firestore do Firebase se o backend Express falhar
+  if (!loadedFromBackend) {
+    try {
+      const { collection, getDocs } = await import('firebase/firestore');
+      const { firestore } = await import('./firebase');
+
+      const fetchCollectionFromFirestore = async (collectionName: string) => {
+        try {
+          const colRef = collection(firestore, collectionName);
+          const snap = await getDocs(colRef);
+          const items: any[] = [];
+          snap.forEach((docSnap) => {
+            items.push(docSnap.data());
+          });
+          items.sort((a, b) => (a.id || 0) - (b.id || 0));
+          return items;
+        } catch (colErr: any) {
+          console.error(`Erro ao carregar coleção ${collectionName} do Firestore:`, colErr.message);
+          return [];
+        }
+      };
+
+      const [clientes, processos, eventos, tarefas, honorarios, despesas, documentos, usuarios, auditoria] = await Promise.all([
+        fetchCollectionFromFirestore('clientes'),
+        fetchCollectionFromFirestore('processos'),
+        fetchCollectionFromFirestore('eventos'),
+        fetchCollectionFromFirestore('tarefas'),
+        fetchCollectionFromFirestore('honorarios'),
+        fetchCollectionFromFirestore('despesas'),
+        fetchCollectionFromFirestore('documentos'),
+        fetchCollectionFromFirestore('usuarios'),
+        fetchCollectionFromFirestore('auditoria'),
+      ]);
+
+      if (clientes.length > 0) db.clientes = clientes;
+      if (processos.length > 0) db.processos = processos;
+      if (eventos.length > 0) db.eventos = eventos;
+      if (tarefas.length > 0) db.tarefas = tarefas;
+      if (honorarios.length > 0) db.honorarios = honorarios;
+      if (despesas.length > 0) db.despesas = despesas;
+      if (documentos.length > 0) db.documentos = documentos;
+      if (usuarios.length > 0) db.usuarios = usuarios;
+      if (auditoria.length > 0) db.auditoria = auditoria;
+
+      console.log('[DB] Fallback bem-sucedido: Dados carregados diretamente do Firestore.');
+    } catch (firestoreErr: any) {
+      console.error('[DB] Erro crítico ao carregar dados em contingência do Firestore:', firestoreErr.message);
+    }
   }
 }

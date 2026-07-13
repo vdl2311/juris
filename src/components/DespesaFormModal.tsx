@@ -38,8 +38,28 @@ export default function DespesaFormModal({ onClose, onSuccess }: DespesaFormModa
       } else {
         setError(json.message || 'Erro ao criar despesa.');
       }
-    } catch (err) {
-      setError('Erro de conexão com o servidor.');
+    } catch (err: any) {
+      console.warn('[DESPESA FALLBACK] Erro de conexão com o backend. Salvando diretamente no Firestore...', err);
+      try {
+        const { doc: fireDoc, setDoc } = await import('firebase/firestore');
+        const { firestore } = await import('../firebase');
+
+        const newDoc = {
+          id: Date.now(),
+          descricao,
+          valor: parseFloat(valor),
+          vencimento,
+          status: 'pendente'
+        };
+
+        const docRef = fireDoc(firestore, 'despesas', String(newDoc.id));
+        await setDoc(docRef, newDoc);
+
+        onSuccess(newDoc);
+      } catch (firestoreErr: any) {
+        console.error('[DESPESA FALLBACK CRÍTICO] Erro ao salvar diretamente no Firestore:', firestoreErr);
+        setError('Erro de conexão ao salvar.');
+      }
     } finally {
       setLoading(false);
     }

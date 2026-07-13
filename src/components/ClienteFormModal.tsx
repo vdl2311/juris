@@ -70,8 +70,46 @@ export default function ClienteFormModal({ onClose, onSuccess }: ClienteFormModa
       } else {
         onSuccess(resData.data);
       }
-    } catch {
-      setGeneralError('Erro de conexão.');
+    } catch (err: any) {
+      console.warn('[CLIENTE FALLBACK] Erro de conexão com o backend. Salvando diretamente no Firestore...', err);
+      try {
+        const { doc: fireDoc, setDoc } = await import('firebase/firestore');
+        const { firestore } = await import('../firebase');
+        
+        const newClient = {
+          id: Date.now(), // ID único baseado em timestamp
+          tipo,
+          nome,
+          doc,
+          contato,
+          email: email || '',
+          endereco: endereco || '',
+          created_at: new Date().toISOString().slice(0, 10),
+        };
+        
+        const clientDocRef = fireDoc(firestore, 'clientes', String(newClient.id));
+        await setDoc(clientDocRef, newClient);
+        
+        // Registrar auditoria local/firestore de contingência
+        try {
+          const auditId = Date.now() + 1;
+          const auditDocRef = fireDoc(firestore, 'auditoria', String(auditId));
+          await setDoc(auditDocRef, {
+            id: auditId,
+            usuario: 'Sistema (Contingência)',
+            acao: 'Criar Cliente',
+            detalhes: `Criou o cliente ${newClient.nome} (ID: ${newClient.id}) via conexão direta com o Firestore.`,
+            data_hora: new Date().toISOString()
+          });
+        } catch (auditErr) {
+          console.warn('Não foi possível gravar auditoria em contingência:', auditErr);
+        }
+        
+        onSuccess(newClient);
+      } catch (firestoreErr: any) {
+        console.error('[CLIENTE FALLBACK CRÍTICO] Erro ao salvar diretamente no Firestore:', firestoreErr);
+        setGeneralError('Erro de conexão ao salvar.');
+      }
     } finally {
       setIsSubmitting(false);
     }

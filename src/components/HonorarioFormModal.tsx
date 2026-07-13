@@ -44,8 +44,30 @@ export default function HonorarioFormModal({ clientes, processos, onClose, onSuc
       } else {
         setError(json.message || 'Erro ao criar honorário.');
       }
-    } catch (err) {
-      setError('Erro de conexão com o servidor.');
+    } catch (err: any) {
+      console.warn('[HONORARIO FALLBACK] Erro de conexão com o backend. Salvando diretamente no Firestore...', err);
+      try {
+        const { doc: fireDoc, setDoc } = await import('firebase/firestore');
+        const { firestore } = await import('../firebase');
+
+        const newDoc = {
+          id: Date.now(),
+          clienteId: parseInt(clienteId),
+          processoId: processoId ? parseInt(processoId) : null,
+          valor: parseFloat(valor),
+          tipo,
+          vencimento,
+          status: 'pendente'
+        };
+
+        const docRef = fireDoc(firestore, 'honorarios', String(newDoc.id));
+        await setDoc(docRef, newDoc);
+
+        onSuccess(newDoc);
+      } catch (firestoreErr: any) {
+        console.error('[HONORARIO FALLBACK CRÍTICO] Erro ao salvar diretamente no Firestore:', firestoreErr);
+        setError('Erro de conexão ao salvar.');
+      }
     } finally {
       setLoading(false);
     }

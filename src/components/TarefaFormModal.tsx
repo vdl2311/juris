@@ -44,8 +44,30 @@ export default function TarefaFormModal({ advogados, processos, onClose, onSucce
       } else {
         setError(json.message || 'Erro ao criar tarefa.');
       }
-    } catch (err) {
-      setError('Erro de conexão com o servidor.');
+    } catch (err: any) {
+      console.warn('[TAREFA FALLBACK] Erro de conexão com o backend. Salvando diretamente no Firestore...', err);
+      try {
+        const { doc: fireDoc, setDoc } = await import('firebase/firestore');
+        const { firestore } = await import('../firebase');
+
+        const newDoc = {
+          id: Date.now(),
+          titulo,
+          responsavelId: parseInt(responsavelId),
+          processoId: processoId ? parseInt(processoId) : null,
+          prioridade,
+          prazo,
+          status: 'pendente'
+        };
+
+        const docRef = fireDoc(firestore, 'tarefas', String(newDoc.id));
+        await setDoc(docRef, newDoc);
+
+        onSuccess(newDoc);
+      } catch (firestoreErr: any) {
+        console.error('[TAREFA FALLBACK CRÍTICO] Erro ao salvar diretamente no Firestore:', firestoreErr);
+        setError('Erro de conexão ao salvar.');
+      }
     } finally {
       setLoading(false);
     }

@@ -40,8 +40,30 @@ export default function DocumentoFormModal({ clientes, processos, onClose, onSuc
       } else {
         setError(json.message || 'Erro ao carregar documento.');
       }
-    } catch (err) {
-      setError('Erro de conexão com o servidor.');
+    } catch (err: any) {
+      console.warn('[DOCUMENTO FALLBACK] Erro de conexão com o backend. Salvando diretamente no Firestore...', err);
+      try {
+        const { doc: fireDoc, setDoc } = await import('firebase/firestore');
+        const { firestore } = await import('../firebase');
+
+        const newDoc = {
+          id: Date.now(),
+          nome,
+          clienteId: parseInt(clienteId),
+          processoId: processoId ? parseInt(processoId) : null,
+          data: new Date().toISOString().slice(0, 10),
+          assinatura: 'pendente',
+          origem: 'upload'
+        };
+
+        const docRef = fireDoc(firestore, 'documentos', String(newDoc.id));
+        await setDoc(docRef, newDoc);
+
+        onSuccess(newDoc);
+      } catch (firestoreErr: any) {
+        console.error('[DOCUMENTO FALLBACK CRÍTICO] Erro ao salvar diretamente no Firestore:', firestoreErr);
+        setError('Erro de conexão ao salvar.');
+      }
     } finally {
       setLoading(false);
     }

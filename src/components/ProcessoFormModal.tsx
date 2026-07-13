@@ -52,8 +52,40 @@ export default function ProcessoFormModal({ clientes, advogados, onClose, onSucc
       } else {
         onSuccess(data.data);
       }
-    } catch {
-      setError('Erro de conexão.');
+    } catch (err: any) {
+      console.warn('[PROCESSO FALLBACK] Erro de conexão com o backend. Salvando diretamente no Firestore...', err);
+      try {
+        const { doc: fireDoc, setDoc } = await import('firebase/firestore');
+        const { firestore } = await import('../firebase');
+
+        const newProcess = {
+          ...form,
+          id: Date.now(),
+          status: 'ativo',
+          andamentos: []
+        };
+
+        const procDocRef = fireDoc(firestore, 'processos', String(newProcess.id));
+        await setDoc(procDocRef, newProcess);
+
+        // Registrar auditoria
+        try {
+          const auditId = Date.now() + 1;
+          const auditDocRef = fireDoc(firestore, 'auditoria', String(auditId));
+          await setDoc(auditDocRef, {
+            id: auditId,
+            usuario: 'Sistema (Contingência)',
+            acao: 'Criar Processo',
+            detalhes: `Criou o processo ${newProcess.numero} (ID: ${newProcess.id}) via conexão direta com o Firestore.`,
+            data_hora: new Date().toISOString()
+          });
+        } catch (auditErr) {}
+
+        onSuccess(newProcess);
+      } catch (firestoreErr: any) {
+        console.error('[PROCESSO FALLBACK CRÍTICO] Erro ao salvar diretamente no Firestore:', firestoreErr);
+        setError('Erro de conexão ao salvar.');
+      }
     } finally {
       setIsSubmitting(false);
     }

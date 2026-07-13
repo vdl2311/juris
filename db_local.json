@@ -59,6 +59,16 @@
       "email": "vidal2311usa@gmail.com",
       "endereco": "Av Alberto Geovanini 187\nAP 302",
       "created_at": "2026-07-13"
+    },
+    {
+      "id": 5,
+      "tipo": "PF",
+      "nome": "Joaquim Vidal Junior",
+      "doc": "062.159.456-99",
+      "contato": "(31) 9483-6584",
+      "email": "vidal2311usa@gmail.com",
+      "endereco": "Av Alberto Geovanini 187",
+      "created_at": "2026-07-13"
     }
   ],
   "processos": [
@@ -259,6 +269,14 @@
       "acao": "Deletar Despesa",
       "detalhes": "Excluiu a despesa \"Custas processuais\" (ID: 2)",
       "dataHora": "2026-07-13T09:11:46.151Z"
+    },
+    {
+      "id": 5,
+      "usuarioEmail": "sistema@escritorio.com.br",
+      "usuarioNome": "Sistema",
+      "acao": "Criar Cliente",
+      "detalhes": "Criou o cliente Joaquim Vidal Junior (ID: 5, Tipo: PF)",
+      "dataHora": "2026-07-13T10:28:57.731Z"
     }
   ],
   "integracoes": {
@@ -271,7 +289,7 @@
     "ultimaSincroniaTribunal": "2026-07-12T12:42:49.806Z"
   },
   "nextId": {
-    "cliente": 5,
+    "cliente": 6,
     "processo": 4,
     "evento": 4,
     "tarefa": 4,
@@ -279,6 +297,6 @@
     "documento": 3,
     "usuario": 5,
     "despesa": 4,
-    "auditoria": 5
+    "auditoria": 6
   }
 }
