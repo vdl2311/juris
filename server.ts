@@ -865,6 +865,23 @@ async function startServer() {
     const newUser = { id: targetId, nome, email, perfil };
     try {
       if (firestoreDb) {
+        // Tentar criar no Firebase Auth se não existir
+        try {
+          const tempPassword = Math.random().toString(36).slice(-10) + 'A1!';
+          await admin.auth().createUser({
+            email: email.toLowerCase().trim(),
+            password: tempPassword,
+            displayName: nome
+          });
+          console.log(`[FIREBASE] Usuário ${email} criado no Firebase Auth pelo backend.`);
+        } catch (authErr: any) {
+          if (authErr.code === 'auth/email-already-exists') {
+            console.log(`[FIREBASE] Usuário ${email} já existe no Firebase Auth.`);
+          } else {
+            console.error(`[FIREBASE] Erro ao criar usuário no Auth pelo backend:`, authErr.message);
+          }
+        }
+
         await firestoreDb.collection('usuarios').doc(String(newUser.id)).set(newUser);
       }
       db.usuarios.push(newUser);
@@ -874,6 +891,48 @@ async function startServer() {
     } catch (err: any) {
       console.error('[FIREBASE] Erro ao salvar usuário:', err.message);
       res.status(500).json({ success: false, message: 'Erro ao gravar usuário no Firestore: ' + err.message });
+    }
+  });
+
+  app.post('/api/garantir-usuario-auth', async (req, res) => {
+    const { email } = req.body;
+    if (!email) {
+      res.status(400).json({ success: false, message: 'O e-mail é obrigatório.' });
+      return;
+    }
+    const emailLower = email.toLowerCase().trim();
+    const user = db.usuarios.find((u) => (u.email || '').toLowerCase().trim() === emailLower);
+    
+    if (!user) {
+      res.status(404).json({ success: false, message: 'E-mail corporativo não cadastrado no sistema.' });
+      return;
+    }
+
+    if (firestoreDb) {
+      try {
+        try {
+          await admin.auth().getUserByEmail(emailLower);
+          console.log(`[FIREBASE] Usuário ${emailLower} já existe no Firebase Auth.`);
+        } catch (authErr: any) {
+          if (authErr.code === 'auth/user-not-found') {
+            const tempPassword = Math.random().toString(36).slice(-10) + 'A1!';
+            await admin.auth().createUser({
+              email: emailLower,
+              password: tempPassword,
+              displayName: user.nome || emailLower.split('@')[0],
+            });
+            console.log(`[FIREBASE] Usuário ${emailLower} criado com sucesso no Firebase Auth via garantia de recuperação.`);
+          } else {
+            throw authErr;
+          }
+        }
+        res.json({ success: true, message: 'Usuário garantido no Firebase Auth.' });
+      } catch (err: any) {
+        console.error('[FIREBASE] Erro ao garantir usuário no Firebase Auth:', err.message);
+        res.status(500).json({ success: false, message: 'Erro ao registrar usuário no Firebase Auth: ' + err.message });
+      }
+    } else {
+      res.json({ success: true, message: 'Modo contingência (sem FirestoreDb).' });
     }
   });
 

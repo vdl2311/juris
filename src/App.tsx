@@ -709,15 +709,34 @@ function LoginScreen({ onLogin }: { onLogin: (u: any) => void }) {
   const handleRecuperarFirebase = async (e: React.FormEvent) => {
     e.preventDefault();
     setStatusMsg(null);
-    if (!emailRecuperar.trim()) {
+    const targetEmail = emailRecuperar.trim();
+    if (!targetEmail) {
       setStatusMsg({ type: 'error', text: 'Por favor, insira o e-mail de cadastro.' });
       return;
     }
 
     setLoading(true);
     try {
-      await sendPasswordResetEmail(auth, emailRecuperar.trim());
-      setStatusMsg({ type: 'success', text: 'Se o e-mail estiver cadastrado no Firebase Auth, um link de redefinição de senha foi enviado para sua caixa de entrada.' });
+      // 1. Garantir que o usuário está cadastrado/sincronizado no Firebase Auth através do backend
+      try {
+        const checkRes = await fetch('/api/garantir-usuario-auth', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: targetEmail }),
+        });
+        if (!checkRes.ok) {
+          const errData = await checkRes.json();
+          setStatusMsg({ type: 'error', text: errData.message || 'E-mail corporativo não cadastrado no sistema.' });
+          setLoading(false);
+          return;
+        }
+      } catch (checkErr) {
+        console.warn('Erro ao verificar/garantir usuário no backend:', checkErr);
+      }
+
+      // 2. Chamar a função do Firebase para redefinição
+      await sendPasswordResetEmail(auth, targetEmail);
+      setStatusMsg({ type: 'success', text: 'Um link de redefinição de senha foi enviado para o seu e-mail cadastrado.' });
       setEmailRecuperar('');
     } catch (err: any) {
       console.error('Erro Firebase Auth:', err);
