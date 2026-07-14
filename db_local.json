@@ -26,129 +26,59 @@
       "nome": "Vidal Teste",
       "email": "testevidal@gmail.com",
       "perfil": "Secretária"
+    },
+    {
+      "id": 6,
+      "nome": "Test User",
+      "email": "test@test.com",
+      "perfil": "Advogado"
+    },
+    {
+      "id": 7,
+      "nome": "Test User 2",
+      "email": "test2@test.com",
+      "perfil": "Advogado"
+    },
+    {
+      "id": 12345,
+      "nome": "Test User 3",
+      "email": "test3@test.com",
+      "perfil": "Advogado"
+    },
+    {
+      "id": 8,
+      "nome": "Test User 4",
+      "email": "test4@test.com",
+      "perfil": "Advogado"
+    },
+    {
+      "id": 9,
+      "nome": "Test User 5",
+      "email": "test5@test.com",
+      "perfil": "Advogado"
+    },
+    {
+      "id": 10,
+      "nome": "Test User 6",
+      "email": "test6@test.com",
+      "perfil": "Advogado"
+    },
+    {
+      "id": 11,
+      "nome": "Test User 7",
+      "email": "test7@test.com",
+      "perfil": "Advogado"
+    },
+    {
+      "id": 12,
+      "nome": "Test User 8",
+      "email": "test8@test.com",
+      "perfil": "Advogado"
     }
   ],
-  "clientes": [
-    {
-      "id": 1,
-      "tipo": "PF",
-      "nome": "João Pedro Almeida",
-      "doc": "123.456.789-00",
-      "contato": "(31) 99888-1122",
-      "email": "joao@email.com",
-      "endereco": "Ipatinga - MG"
-    },
-    {
-      "id": 2,
-      "tipo": "PJ",
-      "nome": "Metalúrgica Vale Ltda",
-      "doc": "12.345.678/0001-90",
-      "contato": "(31) 3333-4455",
-      "email": "contato@vale.com.br",
-      "endereco": "Coronel Fabriciano - MG"
-    },
-    {
-      "id": 3,
-      "tipo": "PF",
-      "nome": "Marta Oliveira Costa",
-      "doc": "987.654.321-00",
-      "contato": "(31) 98877-6655",
-      "email": "marta@email.com",
-      "endereco": "Timóteo - MG"
-    },
-    {
-      "id": 4,
-      "tipo": "PF",
-      "nome": "Joaquim Vidal Junior",
-      "doc": "062.149.456-99",
-      "contato": "(31) 9875-3676",
-      "email": "vidal2311usa@gmail.com",
-      "endereco": "Av Alberto Geovanini 187\nAP 302",
-      "created_at": "2026-07-13"
-    },
-    {
-      "id": 5,
-      "tipo": "PF",
-      "nome": "Joaquim Vidal Junior",
-      "doc": "062.159.456-99",
-      "contato": "(31) 9483-6584",
-      "email": "vidal2311usa@gmail.com",
-      "endereco": "Av Alberto Geovanini 187",
-      "created_at": "2026-07-13"
-    }
-  ],
-  "processos": [
-    {
-      "id": 1,
-      "numero": "0001234-56.2025.8.13.0313",
-      "tribunal": "TJMG",
-      "vara": "2ª Vara Cível",
-      "classe": "Ação de Cobrança",
-      "assunto": "Inadimplência contratual",
-      "clienteId": 1,
-      "advogadoId": 2,
-      "status": "ativo",
-      "valorCausa": 18500,
-      "andamentos": [
-        {
-          "data": "2026-06-10",
-          "desc": "Petição inicial protocolada"
-        },
-        {
-          "data": "2026-06-25",
-          "desc": "Citação da parte ré"
-        }
-      ]
-    },
-    {
-      "id": 2,
-      "numero": "0007788-12.2024.8.13.0313",
-      "tribunal": "TJMG",
-      "vara": "1ª Vara do Trabalho",
-      "classe": "Reclamação Trabalhista",
-      "assunto": "Horas extras",
-      "clienteId": 2,
-      "advogadoId": 2,
-      "status": "ativo",
-      "valorCausa": 42000,
-      "andamentos": [
-        {
-          "data": "2026-05-02",
-          "desc": "Audiência realizada"
-        },
-        {
-          "data": "2026-06-30",
-          "desc": "Aguardando sentença"
-        }
-      ]
-    }
-  ],
-  "eventos": [
-    {
-      "id": 1,
-      "tipo": "Audiência",
-      "processoId": 2,
-      "data": "2026-07-15",
-      "hora": "14:00",
-      "local": "Fórum de Timóteo - Sala 3"
-    },
-    {
-      "id": 2,
-      "tipo": "Prazo",
-      "processoId": 1,
-      "data": "2026-07-14",
-      "hora": "23:59",
-      "local": "Contestação"
-    },
-    {
-      "id": 3,
-      "tipo": "Reunião",
-      "processoId": 1,
-      "data": "2026-07-18",
-      "hora": "10:00",
-      "local": "Escritório"
-    }
-  ],
+  "clientes": [],
+  "processos": [],
+  "eventos": [],
   "tarefas": [
     {
       "id": 1,
@@ -174,55 +104,12 @@
       "responsavelId": 4,
       "processoId": null,
       "prioridade": "baixa",
-      "status": "pendente",
+      "status": "concluida",
       "prazo": "2026-07-20"
     }
   ],
-  "honorarios": [
-    {
-      "id": 1,
-      "processoId": 1,
-      "clienteId": 1,
-      "valor": 3500,
-      "tipo": "fixo",
-      "status": "pendente",
-      "vencimento": "2026-07-19"
-    },
-    {
-      "id": 2,
-      "processoId": 2,
-      "clienteId": 2,
-      "valor": 8000,
-      "tipo": "exito",
-      "status": "pago",
-      "vencimento": "2026-07-03"
-    },
-    {
-      "id": 3,
-      "processoId": 3,
-      "clienteId": 3,
-      "valor": 1200,
-      "tipo": "fixo",
-      "status": "atrasado",
-      "vencimento": "2026-06-28"
-    }
-  ],
-  "despesas": [
-    {
-      "id": 1,
-      "descricao": "Aluguel do escritório",
-      "valor": 2800,
-      "vencimento": "2026-07-16",
-      "status": "pendente"
-    },
-    {
-      "id": 3,
-      "descricao": "Água ",
-      "valor": 278,
-      "vencimento": "2026-07-24",
-      "status": "pendente"
-    }
-  ],
+  "honorarios": [],
+  "despesas": [],
   "documentos": [
     {
       "id": 1,
@@ -291,6 +178,254 @@
       "acao": "Criar Usuário",
       "detalhes": "Criou o usuário \"Vidal Teste\" (testevidal@gmail.com, Perfil: Secretária)",
       "dataHora": "2026-07-13T10:39:33.703Z"
+    },
+    {
+      "id": 7,
+      "usuarioEmail": "vidal2311usa@gmail.com",
+      "usuarioNome": "Administrador",
+      "acao": "Deletar Cliente",
+      "detalhes": "Excluiu o cliente Joaquim Vidal Junior (ID: 5)",
+      "dataHora": "2026-07-14T01:40:59.312Z"
+    },
+    {
+      "id": 8,
+      "usuarioEmail": "vidal2311usa@gmail.com",
+      "usuarioNome": "Administrador",
+      "acao": "Deletar Cliente",
+      "detalhes": "Excluiu o cliente Joaquim Vidal Junior (ID: 4)",
+      "dataHora": "2026-07-14T01:41:02.213Z"
+    },
+    {
+      "id": 9,
+      "usuarioEmail": "vidal2311usa@gmail.com",
+      "usuarioNome": "Administrador",
+      "acao": "Deletar Cliente",
+      "detalhes": "Excluiu o cliente Marta Oliveira Costa (ID: 3)",
+      "dataHora": "2026-07-14T01:41:04.970Z"
+    },
+    {
+      "id": 10,
+      "usuarioEmail": "vidal2311usa@gmail.com",
+      "usuarioNome": "Administrador",
+      "acao": "Deletar Cliente",
+      "detalhes": "Excluiu o cliente João Pedro Almeida (ID: 1)",
+      "dataHora": "2026-07-14T01:41:11.078Z"
+    },
+    {
+      "id": 11,
+      "usuarioEmail": "vidal2311usa@gmail.com",
+      "usuarioNome": "Administrador",
+      "acao": "Deletar Honorário",
+      "detalhes": "Excluiu o honorário ID 1",
+      "dataHora": "2026-07-14T01:42:03.845Z"
+    },
+    {
+      "id": 12,
+      "usuarioEmail": "vidal2311usa@gmail.com",
+      "usuarioNome": "Administrador",
+      "acao": "Baixa de Honorário",
+      "detalhes": "Marcou o honorário ID 3 como pago",
+      "dataHora": "2026-07-14T01:42:05.633Z"
+    },
+    {
+      "id": 13,
+      "usuarioEmail": "vidal2311usa@gmail.com",
+      "usuarioNome": "Administrador",
+      "acao": "Deletar Honorário",
+      "detalhes": "Excluiu o honorário ID 3",
+      "dataHora": "2026-07-14T01:42:09.864Z"
+    },
+    {
+      "id": 14,
+      "usuarioEmail": "vidal2311usa@gmail.com",
+      "usuarioNome": "Administrador",
+      "acao": "Baixa de Despesa",
+      "detalhes": "Marcou a despesa \"Aluguel do escritório\" (ID: 1) como paga",
+      "dataHora": "2026-07-14T01:42:17.851Z"
+    },
+    {
+      "id": 15,
+      "usuarioEmail": "vidal2311usa@gmail.com",
+      "usuarioNome": "Administrador",
+      "acao": "Baixa de Despesa",
+      "detalhes": "Marcou a despesa \"Água \" (ID: 3) como paga",
+      "dataHora": "2026-07-14T01:42:19.467Z"
+    },
+    {
+      "id": 16,
+      "usuarioEmail": "vidal2311usa@gmail.com",
+      "usuarioNome": "Administrador",
+      "acao": "Deletar Processo",
+      "detalhes": "Excluiu o processo nº 0001234-56.2025.8.13.0313 (ID: 1)",
+      "dataHora": "2026-07-14T01:56:01.340Z"
+    },
+    {
+      "id": 17,
+      "usuarioEmail": "vidal2311usa@gmail.com",
+      "usuarioNome": "Administrador",
+      "acao": "Atualizar Tarefa",
+      "detalhes": "Alterou o status da tarefa \"Organizar documentos\" para \"concluida\"",
+      "dataHora": "2026-07-14T01:56:21.923Z"
+    },
+    {
+      "id": 18,
+      "usuarioEmail": "vidal2311usa@gmail.com",
+      "usuarioNome": "Administrador",
+      "acao": "Criar Cliente",
+      "detalhes": "Criou o cliente Joaquim Vidal Junior (ID: 6, Tipo: PF)",
+      "dataHora": "2026-07-14T01:57:53.339Z"
+    },
+    {
+      "id": 19,
+      "usuarioEmail": "vidal2311usa@gmail.com",
+      "usuarioNome": "Administrador",
+      "acao": "Criar Despesa",
+      "detalhes": "Criou a despesa \"energia\" no valor de R$ 450",
+      "dataHora": "2026-07-14T01:58:36.692Z"
+    },
+    {
+      "id": 20,
+      "usuarioEmail": "vidal2311usa@gmail.com",
+      "usuarioNome": "Administrador",
+      "acao": "Deletar Cliente",
+      "detalhes": "Excluiu o cliente Metalúrgica Vale Ltda (ID: 2)",
+      "dataHora": "2026-07-14T02:23:52.150Z"
+    },
+    {
+      "id": 21,
+      "usuarioEmail": "vidal2311usa@gmail.com",
+      "usuarioNome": "Administrador",
+      "acao": "Deletar Cliente",
+      "detalhes": "Excluiu o cliente Joaquim Vidal Junior (ID: 6)",
+      "dataHora": "2026-07-14T02:23:54.352Z"
+    },
+    {
+      "id": 22,
+      "usuarioEmail": "vidal2311usa@gmail.com",
+      "usuarioNome": "Administrador",
+      "acao": "Deletar Processo",
+      "detalhes": "Excluiu o processo nº 0007788-12.2024.8.13.0313 (ID: 2)",
+      "dataHora": "2026-07-14T02:35:21.043Z"
+    },
+    {
+      "id": 23,
+      "usuarioEmail": "vidal2311usa@gmail.com",
+      "usuarioNome": "Administrador",
+      "acao": "Deletar Evento",
+      "detalhes": "Excluiu o evento \"Prazo\" (ID: 2)",
+      "dataHora": "2026-07-14T02:35:26.334Z"
+    },
+    {
+      "id": 24,
+      "usuarioEmail": "vidal2311usa@gmail.com",
+      "usuarioNome": "Administrador",
+      "acao": "Deletar Evento",
+      "detalhes": "Excluiu o evento \"Audiência\" (ID: 1)",
+      "dataHora": "2026-07-14T02:35:28.986Z"
+    },
+    {
+      "id": 25,
+      "usuarioEmail": "vidal2311usa@gmail.com",
+      "usuarioNome": "Administrador",
+      "acao": "Deletar Evento",
+      "detalhes": "Excluiu o evento \"Reunião\" (ID: 3)",
+      "dataHora": "2026-07-14T02:35:31.762Z"
+    },
+    {
+      "id": 26,
+      "usuarioEmail": "vidal2311usa@gmail.com",
+      "usuarioNome": "Administrador",
+      "acao": "Deletar Honorário",
+      "detalhes": "Excluiu o honorário ID 2",
+      "dataHora": "2026-07-14T02:35:40.243Z"
+    },
+    {
+      "id": 27,
+      "usuarioEmail": "vidal2311usa@gmail.com",
+      "usuarioNome": "Administrador",
+      "acao": "Deletar Despesa",
+      "detalhes": "Excluiu a despesa \"Água \" (ID: 3)",
+      "dataHora": "2026-07-14T02:35:46.879Z"
+    },
+    {
+      "id": 28,
+      "usuarioEmail": "vidal2311usa@gmail.com",
+      "usuarioNome": "Administrador",
+      "acao": "Deletar Despesa",
+      "detalhes": "Excluiu a despesa \"Aluguel do escritório\" (ID: 1)",
+      "dataHora": "2026-07-14T02:35:49.438Z"
+    },
+    {
+      "id": 29,
+      "usuarioEmail": "vidal2311usa@gmail.com",
+      "usuarioNome": "Administrador",
+      "acao": "Deletar Despesa",
+      "detalhes": "Excluiu a despesa \"energia\" (ID: 4)",
+      "dataHora": "2026-07-14T02:35:52.023Z"
+    },
+    {
+      "id": 30,
+      "usuarioEmail": "sistema@escritorio.com.br",
+      "usuarioNome": "Sistema",
+      "acao": "Criar Usuário",
+      "detalhes": "Criou o usuário \"Test User\" (test@test.com, Perfil: Advogado)",
+      "dataHora": "2026-07-14T04:18:43.467Z"
+    },
+    {
+      "id": 31,
+      "usuarioEmail": "sistema@escritorio.com.br",
+      "usuarioNome": "Sistema",
+      "acao": "Criar Usuário",
+      "detalhes": "Criou o usuário \"Test User 2\" (test2@test.com, Perfil: Advogado)",
+      "dataHora": "2026-07-14T04:21:39.707Z"
+    },
+    {
+      "id": 32,
+      "usuarioEmail": "sistema@escritorio.com.br",
+      "usuarioNome": "Sistema",
+      "acao": "Criar Usuário",
+      "detalhes": "Criou o usuário \"Test User 3\" (test3@test.com, Perfil: Advogado)",
+      "dataHora": "2026-07-14T04:21:57.739Z"
+    },
+    {
+      "id": 33,
+      "usuarioEmail": "sistema@escritorio.com.br",
+      "usuarioNome": "Sistema",
+      "acao": "Criar Usuário",
+      "detalhes": "Criou o usuário \"Test User 4\" (test4@test.com, Perfil: Advogado)",
+      "dataHora": "2026-07-14T04:22:33.063Z"
+    },
+    {
+      "id": 34,
+      "usuarioEmail": "sistema@escritorio.com.br",
+      "usuarioNome": "Sistema",
+      "acao": "Criar Usuário",
+      "detalhes": "Criou o usuário \"Test User 5\" (test5@test.com, Perfil: Advogado)",
+      "dataHora": "2026-07-14T04:22:39.161Z"
+    },
+    {
+      "id": 35,
+      "usuarioEmail": "sistema@escritorio.com.br",
+      "usuarioNome": "Sistema",
+      "acao": "Criar Usuário",
+      "detalhes": "Criou o usuário \"Test User 6\" (test6@test.com, Perfil: Advogado)",
+      "dataHora": "2026-07-14T04:22:44.856Z"
+    },
+    {
+      "id": 36,
+      "usuarioEmail": "sistema@escritorio.com.br",
+      "usuarioNome": "Sistema",
+      "acao": "Criar Usuário",
+      "detalhes": "Criou o usuário \"Test User 7\" (test7@test.com, Perfil: Advogado)",
+      "dataHora": "2026-07-14T04:22:54.848Z"
+    },
+    {
+      "id": 37,
+      "usuarioEmail": "sistema@escritorio.com.br",
+      "usuarioNome": "Sistema",
+      "acao": "Criar Usuário",
+      "detalhes": "Criou o usuário \"Test User 8\" (test8@test.com, Perfil: Advogado)",
+      "dataHora": "2026-07-14T04:23:08.972Z"
     }
   ],
   "integracoes": {
@@ -303,14 +438,14 @@
     "ultimaSincroniaTribunal": "2026-07-12T12:42:49.806Z"
   },
   "nextId": {
-    "cliente": 6,
+    "cliente": 7,
     "processo": 4,
     "evento": 4,
     "tarefa": 4,
     "honorario": 4,
     "documento": 3,
-    "usuario": 6,
-    "despesa": 4,
-    "auditoria": 7
+    "usuario": 13,
+    "despesa": 5,
+    "auditoria": 38
   }
 }

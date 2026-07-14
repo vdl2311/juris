@@ -2901,18 +2901,6 @@ function Usuarios({ confirmAction }: any) {
       };
       
       const password = generateSecurePassword();
-      let authSucceeded = false;
-      try {
-        // Criar o usuário no Firebase Auth usando uma instância secundária para não deslogar o admin
-        const secondaryApp = initializeApp(firebaseConfig, "SecondaryApp-" + Date.now());
-        const secondaryAuth = getAuth(secondaryApp);
-        
-        await createUserWithEmailAndPassword(secondaryAuth, novoUsuario.email, password);
-        await secondaryAuth.signOut();
-        authSucceeded = true;
-      } catch (authErr: any) {
-        console.warn('Erro ao criar usuário no Firebase Auth (contingência habilitada):', authErr);
-      }
       
       const userId = Date.now();
       const userDoc = {
@@ -2935,7 +2923,7 @@ function Usuarios({ confirmAction }: any) {
         const res = await fetch('/api/usuarios', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(userDoc),
+          body: JSON.stringify({ ...userDoc, senha: password }),
         });
         if (res.ok) {
           const contentType = res.headers.get('content-type');
@@ -2956,9 +2944,7 @@ function Usuarios({ confirmAction }: any) {
       db.usuarios = updatedUsers;
       setNovoUsuario({ nome: '', email: '', perfil: 'Advogado' });
       setShowForm(false);
-      const successMsg = authSucceeded
-        ? `Usuário criado com sucesso! Senha temporária: ${password}`
-        : `Usuário criado com sucesso!`;
+      const successMsg = `Usuário criado com sucesso! Senha temporária: ${password}`;
       setStatus({ type: 'success', message: successMsg });
     } catch (err: any) {
       console.error('Erro ao criar usuário:', err);

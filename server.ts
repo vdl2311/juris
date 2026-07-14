@@ -4,6 +4,7 @@ import { fileURLToPath } from 'url';
 import { createServer as createViteServer } from 'vite';
 import { GoogleGenAI } from '@google/genai';
 import admin from 'firebase-admin';
+import { getApps } from 'firebase-admin/app';
 import fs from 'fs';
 import nodemailer from 'nodemailer';
 import {
@@ -29,7 +30,7 @@ try {
     
     // Inicializa o Admin SDK. Em ambiente Cloud Run, ele usa a Service Account padrão automaticamente.
     // Em ambientes como o Vercel, podemos passar as credenciais por variável de ambiente.
-    if (admin.apps.length === 0) {
+    if (getApps().length === 0) {
       let serviceAccountVar = process.env.FIREBASE_SERVICE_ACCOUNT;
       if (serviceAccountVar) {
         try {
@@ -853,7 +854,7 @@ async function startServer() {
   });
 
   app.post('/api/usuarios', async (req, res) => {
-    const { nome, email, perfil, id } = req.body;
+    const { nome, email, perfil, id, senha } = req.body;
     if (!nome || !email || !perfil) {
       res.status(400).json({ success: false, message: 'Campos obrigatórios ausentes.' });
       return;
@@ -867,7 +868,7 @@ async function startServer() {
       if (firestoreDb) {
         // Tentar criar no Firebase Auth se não existir
         try {
-          const tempPassword = Math.random().toString(36).slice(-10) + 'A1!';
+          const tempPassword = senha || Math.random().toString(36).slice(-10) + 'A1!';
           await admin.auth().createUser({
             email: email.toLowerCase().trim(),
             password: tempPassword,
@@ -887,7 +888,7 @@ async function startServer() {
       db.usuarios.push(newUser);
       saveLocalDb();
       await logAudit(req, 'Criar Usuário', `Criou o usuário "${newUser.nome}" (${newUser.email}, Perfil: ${newUser.perfil})`);
-      res.status(201).json({ success: true, data: newUser });
+      res.status(201).json({ success: true, data: newUser, firestoreIsNotNull: !!firestoreDb, err: firebaseInitError });
     } catch (err: any) {
       console.error('[FIREBASE] Erro ao salvar usuário:', err.message);
       res.status(500).json({ success: false, message: 'Erro ao gravar usuário no Firestore: ' + err.message });
