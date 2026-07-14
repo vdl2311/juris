@@ -2878,8 +2878,22 @@ function Usuarios({ confirmAction }: any) {
       }
     }
 
-    setUsuarios(loadedUsers);
-    db.usuarios = loadedUsers;
+    // Garantir de-duplicação absoluta por ID e por E-mail para evitar avisos de chaves duplicadas no React
+    const finalUniqueList: any[] = [];
+    const seenIds = new Set();
+    const seenEmails = new Set();
+    loadedUsers.forEach((u) => {
+      const uId = u.id;
+      const uEmail = (u.email || '').toLowerCase().trim();
+      if (!seenIds.has(uId) && !seenEmails.has(uEmail)) {
+        seenIds.add(uId);
+        seenEmails.add(uEmail);
+        finalUniqueList.push(u);
+      }
+    });
+
+    setUsuarios(finalUniqueList);
+    db.usuarios = finalUniqueList;
     setLoading(false);
   };
 
@@ -2890,6 +2904,12 @@ function Usuarios({ confirmAction }: any) {
   const criar = async () => {
     if (!novoUsuario.nome || !novoUsuario.email) return;
     setStatus(null);
+    const emailLower = (novoUsuario.email || '').toLowerCase().trim();
+    const emailExists = usuarios.some(u => (u.email || '').toLowerCase().trim() === emailLower);
+    if (emailExists) {
+      setStatus({ type: 'error', message: 'Este e-mail já está sendo utilizado por outro usuário.' });
+      return;
+    }
     try {
       const generateSecurePassword = () => {
         const chars = 'abcdefghijklmnopqrstuvwxyz';
