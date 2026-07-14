@@ -181,9 +181,13 @@ async function syncFirestore() {
           
           saveLocalDb();
           
-          // Atualizar o nextId
+          // Sincronizar o nextId de forma segura contra NaNs de IDs não-numéricos
           if (loadedData.length > 0) {
-            const maxId = Math.max(...loadedData.map(item => item.id || 0));
+            const numericIds = loadedData.map(item => {
+              const parsed = typeof item.id === 'number' ? item.id : parseInt(String(item.id));
+              return isNaN(parsed) ? 0 : parsed;
+            });
+            const maxId = Math.max(...numericIds, 0);
             const singularKey = coll.key.endsWith('s') ? coll.key.slice(0, -1) : coll.key;
             if ((db.nextId as any)[singularKey] !== undefined) {
               (db.nextId as any)[singularKey] = maxId + 1;
@@ -242,17 +246,25 @@ async function syncFirestore() {
       console.error('[FIREBASE] Erro ao sincronizar configurações de integrações:', errInt.message);
     }
 
-    // Sincronizar os contadores de IDs baseados no máximo ID carregado
+    // Sincronizar os contadores de IDs baseados no máximo ID carregado de forma segura contra NaNs
+    const safeMaxId = (arr: any[]) => {
+      const numericIds = arr.map(x => {
+        const parsed = typeof x.id === 'number' ? x.id : parseInt(String(x.id));
+        return isNaN(parsed) ? 0 : parsed;
+      });
+      return Math.max(...numericIds, 0);
+    };
+
     db.nextId = {
-      cliente: Math.max(...db.clientes.map(x => x.id), 0) + 1,
-      processo: Math.max(...db.processos.map(x => x.id), 0) + 1,
-      evento: Math.max(...db.eventos.map(x => x.id), 0) + 1,
-      tarefa: Math.max(...db.tarefas.map(x => x.id), 0) + 1,
-      honorario: Math.max(...db.honorarios.map(x => x.id), 0) + 1,
-      documento: Math.max(...db.documentos.map(x => x.id), 0) + 1,
-      usuario: Math.max(...db.usuarios.map(x => x.id), 0) + 1,
-      despesa: Math.max(...db.despesas.map(x => x.id), 0) + 1,
-      auditoria: Math.max(...db.auditoria.map(x => x.id), 0) + 1,
+      cliente: safeMaxId(db.clientes) + 1,
+      processo: safeMaxId(db.processos) + 1,
+      evento: safeMaxId(db.eventos) + 1,
+      tarefa: safeMaxId(db.tarefas) + 1,
+      honorario: safeMaxId(db.honorarios) + 1,
+      documento: safeMaxId(db.documentos) + 1,
+      usuario: safeMaxId(db.usuarios) + 1,
+      despesa: safeMaxId(db.despesas) + 1,
+      auditoria: safeMaxId(db.auditoria) + 1,
     };
     console.log('[FIREBASE] Sincronização concluída! Próximos IDs:', db.nextId);
     saveLocalDb();

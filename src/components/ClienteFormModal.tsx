@@ -63,15 +63,52 @@ export default function ClienteFormModal({ onClose, onSuccess }: ClienteFormModa
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ tipo, nome, doc, contato, email, endereco }),
       });
-      const resData = await response.json();
+      
+      let resData: any = null;
+      const contentType = response.headers.get('content-type');
+      if (contentType && contentType.includes('application/json')) {
+        resData = await response.json();
+      } else {
+        const text = await response.text();
+        // Se a resposta for HTML, tenta extrair uma mensagem de erro simples ou mostra o status
+        const isHtml = text.trim().startsWith('<');
+        let errorMsg = `Resposta inválida do servidor (Status: ${response.status})`;
+        if (isHtml) {
+          const match = text.match(/<pre>([\s\S]*?)<\/pre>/i) || text.match(/<h1>([\s\S]*?)<\/h1>/i);
+          if (match && match[1]) {
+            errorMsg = `Erro do Servidor: ${match[1].replace(/<[^>]*>/g, '').trim().slice(0, 150)}`;
+          }
+        } else if (text.trim().length > 0) {
+          errorMsg = text.trim().slice(0, 150);
+        }
+        throw new Error(errorMsg);
+      }
+
       if (!response.ok) {
-        if (resData.errors) setBackendErrors(resData.errors);
-        setGeneralError(resData.message || 'Erro de validação.');
+        if (resData && resData.errors) setBackendErrors(resData.errors);
+        setGeneralError(resData?.message || 'Erro de validação.');
       } else {
         onSuccess(resData.data);
       }
     } catch (err: any) {
-      console.warn('[CLIENTE FALLBACK] Erro de conexão com o backend. Salvando diretamente no Firestore...', err);
+      console.warn('[CLIENTE BACKEND ERROR]', err);
+      
+      // Se não for um erro de rede do próprio fetch (por exemplo, erro de resposta do servidor ou parsing),
+      // exibe o erro diretamente sem cair no fallback direto de offline do Firestore.
+      const isNetworkError = err.message && (
+        err.message.includes('Failed to fetch') || 
+        err.message.includes('NetworkError') || 
+        err.message.includes('network') ||
+        err.message.includes('fetch')
+      );
+
+      if (!isNetworkError) {
+        setGeneralError(err.message || 'Erro ao processar cliente.');
+        setIsSubmitting(false);
+        return;
+      }
+
+      console.log('[CLIENTE FALLBACK] Tentando persistência direta via Firestore devido a erro de rede...', err);
       try {
         const { doc: fireDoc, setDoc } = await import('firebase/firestore');
         const { firestore } = await import('../firebase');
@@ -108,7 +145,7 @@ export default function ClienteFormModal({ onClose, onSuccess }: ClienteFormModa
         onSuccess(newClient);
       } catch (firestoreErr: any) {
         console.error('[CLIENTE FALLBACK CRÍTICO] Erro ao salvar diretamente no Firestore:', firestoreErr);
-        setGeneralError('Erro de conexão ao salvar.');
+        setGeneralError('Erro de conexão ao salvar: ' + (firestoreErr.message || 'Erro desconhecido.'));
       }
     } finally {
       setIsSubmitting(false);
