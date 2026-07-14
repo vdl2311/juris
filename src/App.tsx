@@ -601,6 +601,12 @@ function LoginScreen({ onLogin }: { onLogin: (u: any) => void }) {
   const [loginError, setLoginError] = useState<string | null>(null);
   const [usuariosLocais, setUsuariosLocais] = useState<any[]>(db.usuarios);
 
+  // Estados adicionais para recuperação de senha com código de 6 dígitos
+  const [recoveryStep, setRecoveryStep] = useState<1 | 2>(1);
+  const [tokenRecuperar, setTokenRecuperar] = useState('');
+  const [novaSenhaRecuperar, setNovaSenhaRecuperar] = useState('');
+  const [confirmaNovaSenhaRecuperar, setConfirmaNovaSenhaRecuperar] = useState('');
+
   // Recarregar os usuários do backend para sincronizar as senhas do Firestore
   useEffect(() => {
     const carregar = async () => {
@@ -706,7 +712,7 @@ function LoginScreen({ onLogin }: { onLogin: (u: any) => void }) {
     }
   };
 
-  const handleRecuperarFirebase = async (e: React.FormEvent) => {
+  const handleRecuperarSenhaBackend = async (e: React.FormEvent) => {
     e.preventDefault();
     setStatusMsg(null);
     const targetEmail = emailRecuperar.trim();
@@ -717,36 +723,81 @@ function LoginScreen({ onLogin }: { onLogin: (u: any) => void }) {
 
     setLoading(true);
     try {
-      // 1. Garantir que o usuário está cadastrado/sincronizado no Firebase Auth através do backend
-      try {
-        const checkRes = await fetch('/api/garantir-usuario-auth', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email: targetEmail }),
-        });
-        if (!checkRes.ok) {
-          const errData = await checkRes.json();
-          setStatusMsg({ type: 'error', text: errData.message || 'E-mail corporativo não cadastrado no sistema.' });
-          setLoading(false);
-          return;
-        }
-      } catch (checkErr) {
-        console.warn('Erro ao verificar/garantir usuário no backend:', checkErr);
-      }
-
-      // 2. Chamar a função do Firebase para redefinição
-      await sendPasswordResetEmail(auth, targetEmail);
-      setStatusMsg({ type: 'success', text: 'Um link de redefinição de senha foi enviado para o seu e-mail cadastrado.' });
-      setEmailRecuperar('');
-    } catch (err: any) {
-      console.error('Erro Firebase Auth:', err);
-      if (err.code === 'auth/operation-not-allowed') {
-        setStatusMsg({ type: 'error', text: 'O método de login por E-mail/Senha está desativado no Firebase Console. Ative-o na aba Authentication > Sign-in method.' });
-      } else if (err.code === 'auth/user-not-found') {
-        setStatusMsg({ type: 'error', text: 'E-mail não encontrado no Firebase Authentication. Crie o usuário primeiro.' });
+      const res = await fetch('/api/recuperar-senha', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: targetEmail }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        setStatusMsg({ type: 'error', text: data.message || 'Erro ao processar solicitação.' });
       } else {
-        setStatusMsg({ type: 'error', text: 'Erro ao solicitar recuperação. Verifique o e-mail digitado ou se sua conta já foi criada no Firebase Auth.' });
+        setStatusMsg({ type: 'success', text: data.message });
+        setRecoveryStep(2);
       }
+    } catch (err: any) {
+      console.error('Erro ao recuperar senha:', err);
+      setStatusMsg({ type: 'error', text: 'Erro ao conectar ao servidor para recuperação.' });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleRedefinirSenhaBackend = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setStatusMsg(null);
+    const targetEmail = emailRecuperar.trim();
+    const targetToken = tokenRecuperar.trim();
+    const targetNovaSenha = novaSenhaRecuperar.trim();
+    const targetConfirma = confirmaNovaSenhaRecuperar.trim();
+
+    if (!targetToken) {
+      setStatusMsg({ type: 'error', text: 'Por favor, insira o código de verificação enviado.' });
+      return;
+    }
+    if (!targetNovaSenha) {
+      setStatusMsg({ type: 'error', text: 'Por favor, insira a nova senha.' });
+      return;
+    }
+    if (targetNovaSenha !== targetConfirma) {
+      setStatusMsg({ type: 'error', text: 'As senhas não coincidem.' });
+      return;
+    }
+    if (targetNovaSenha.length < 6) {
+      setStatusMsg({ type: 'error', text: 'A senha deve conter pelo menos 6 caracteres.' });
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const res = await fetch('/api/redefinir-senha', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: targetEmail,
+          token: targetToken,
+          novaSenha: targetNovaSenha,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        setStatusMsg({ type: 'error', text: data.message || 'Erro ao redefinir a senha.' });
+      } else {
+        setStatusMsg({ type: 'success', text: 'Senha alterada com sucesso! Você já pode fazer login.' });
+        // Limpar os campos e voltar para login
+        setTimeout(() => {
+          setShowRecuperar(false);
+          setRecoveryStep(1);
+          setTokenRecuperar('');
+          setNovaSenhaRecuperar('');
+          setConfirmaNovaSenhaRecuperar('');
+          setEmailRecuperar('');
+          setStatusMsg(null);
+        }, 3000);
+      }
+    } catch (err: any) {
+      console.error('Erro ao redefinir senha:', err);
+      setStatusMsg({ type: 'error', text: 'Erro ao conectar ao servidor para redefinição.' });
     } finally {
       setLoading(false);
     }
@@ -830,15 +881,19 @@ function LoginScreen({ onLogin }: { onLogin: (u: any) => void }) {
               </div>
             </form>
           ) : (
-            <form onSubmit={handleRecuperarFirebase} className="space-y-4">
-              <h2 className="text-sm font-semibold text-white text-center mb-1">Recuperação de Senha via Firebase</h2>
+            <form onSubmit={recoveryStep === 1 ? handleRecuperarSenhaBackend : handleRedefinirSenhaBackend} className="space-y-4">
+              <h2 className="text-sm font-semibold text-white text-center mb-1">
+                {recoveryStep === 1 ? 'Recuperação de Senha' : 'Redefinição de Senha'}
+              </h2>
               <p className="text-xs text-slate-400 text-center leading-relaxed mb-3">
-                Identifique seu e-mail corporativo cadastrado. Um link de redefinição será enviado pelo Firebase para sua caixa de entrada.
+                {recoveryStep === 1
+                  ? 'Identifique seu e-mail corporativo cadastrado. Enviaremos um código de verificação de 6 dígitos para você.'
+                  : `Código enviado para o e-mail: ${emailRecuperar}. Insira o código de 6 dígitos e sua nova senha de acesso.`}
               </p>
 
               {statusMsg && (
                 <div
-                  className={`p-3 rounded text-xs leading-relaxed ${
+                  className={`p-3 rounded text-xs leading-relaxed break-words whitespace-pre-line ${
                     statusMsg.type === 'success'
                       ? 'bg-emerald-500/10 border border-emerald-500/20 text-emerald-400'
                       : 'bg-red-500/10 border border-red-500/20 text-red-400'
@@ -848,36 +903,88 @@ function LoginScreen({ onLogin }: { onLogin: (u: any) => void }) {
                 </div>
               )}
 
-              <div className="space-y-1.5">
-                <label htmlFor="email-recuperar" className="text-xs text-slate-300 font-medium">E-mail corporativo cadastrado</label>
-                <input
-                  id="email-recuperar"
-                  type="email"
-                  placeholder="exemplo@escritorio.com.br"
-                  className="w-full px-3 py-2 rounded-md text-sm bg-slate-900 border border-white/10 text-white placeholder:text-slate-600 focus:outline-none focus:border-amber-500/50"
-                  value={emailRecuperar}
-                  onChange={(e) => setEmailRecuperar(e.target.value)}
-                  disabled={loading}
-                />
-              </div>
+              {recoveryStep === 1 ? (
+                <div className="space-y-1.5">
+                  <label htmlFor="email-recuperar" className="text-xs text-slate-300 font-medium">E-mail corporativo cadastrado</label>
+                  <input
+                    id="email-recuperar"
+                    type="email"
+                    placeholder="exemplo@escritorio.com.br"
+                    className="w-full px-3 py-2 rounded-md text-sm bg-slate-900 border border-white/10 text-white placeholder:text-slate-600 focus:outline-none focus:border-amber-500/50"
+                    value={emailRecuperar}
+                    onChange={(e) => setEmailRecuperar(e.target.value)}
+                    disabled={loading}
+                    required
+                  />
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <div className="space-y-1.5">
+                    <label htmlFor="token-recuperar" className="text-xs text-slate-300 font-medium">Código de Verificação (6 dígitos)</label>
+                    <input
+                      id="token-recuperar"
+                      type="text"
+                      placeholder="123456"
+                      maxLength={6}
+                      className="w-full px-3 py-2 rounded-md text-sm font-mono tracking-widest text-center bg-slate-900 border border-white/10 text-white placeholder:text-slate-600 focus:outline-none focus:border-amber-500/50"
+                      value={tokenRecuperar}
+                      onChange={(e) => setTokenRecuperar(e.target.value)}
+                      disabled={loading}
+                      required
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label htmlFor="senha-nova" className="text-xs text-slate-300 font-medium">Nova Senha</label>
+                    <input
+                      id="senha-nova"
+                      type="password"
+                      placeholder="Mínimo 6 caracteres"
+                      className="w-full px-3 py-2 rounded-md text-sm bg-slate-900 border border-white/10 text-white placeholder:text-slate-600 focus:outline-none focus:border-amber-500/50"
+                      value={novaSenhaRecuperar}
+                      onChange={(e) => setNovaSenhaRecuperar(e.target.value)}
+                      disabled={loading}
+                      required
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label htmlFor="senha-confirma" className="text-xs text-slate-300 font-medium">Confirmar Nova Senha</label>
+                    <input
+                      id="senha-confirma"
+                      type="password"
+                      placeholder="Repita a nova senha"
+                      className="w-full px-3 py-2 rounded-md text-sm bg-slate-900 border border-white/10 text-white placeholder:text-slate-600 focus:outline-none focus:border-amber-500/50"
+                      value={confirmaNovaSenhaRecuperar}
+                      onChange={(e) => setConfirmaNovaSenhaRecuperar(e.target.value)}
+                      disabled={loading}
+                      required
+                    />
+                  </div>
+                </div>
+              )}
 
               <button
                 type="submit"
                 disabled={loading}
                 className="w-full bg-amber-500 hover:bg-amber-400 disabled:bg-amber-500/50 text-slate-900 py-2.5 rounded-md text-sm font-semibold flex items-center justify-center gap-2 cursor-pointer transition-colors"
               >
-                {loading ? 'Enviando...' : 'Enviar Link de Recuperação'}
+                {loading ? 'Enviando...' : recoveryStep === 1 ? 'Enviar Código de Recuperação' : 'Confirmar Nova Senha'}
               </button>
 
               <button
                 type="button"
                 onClick={() => {
                   setShowRecuperar(false);
+                  setRecoveryStep(1);
+                  setTokenRecuperar('');
+                  setNovaSenhaRecuperar('');
+                  setConfirmaNovaSenhaRecuperar('');
                   setStatusMsg(null);
                 }}
                 className="w-full border border-white/10 text-slate-300 hover:bg-white/5 py-2.5 rounded-md text-sm font-medium flex items-center justify-center gap-2 cursor-pointer transition-colors"
               >
-                Voltar para o login
+                {recoveryStep === 1 ? 'Voltar para o login' : 'Cancelar e Voltar'}
               </button>
             </form>
           )}

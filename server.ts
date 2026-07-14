@@ -1244,6 +1244,26 @@ async function startServer() {
     } catch (err: any) {
       console.error('[FIREBASE] Erro ao salvar senha do usuário:', err.message);
     }
+
+    // Sincronizar redefinição de senha com o Firebase Auth para permitir o login pelo Firebase client
+    try {
+      const authUser = await getAuth().getUserByEmail(emailKey);
+      await getAuth().updateUser(authUser.uid, { password: novaSenha });
+      console.log(`[FIREBASE] Senha atualizada no Firebase Auth com sucesso para ${emailKey}`);
+    } catch (authErr: any) {
+      console.warn('[FIREBASE] Usuário não existia no Auth ou erro de sinc ao redefinir, tentando criar:', authErr.message);
+      try {
+        await getAuth().createUser({
+          email: emailKey,
+          password: novaSenha,
+          displayName: user.nome || emailKey.split('@')[0],
+        });
+        console.log(`[FIREBASE] Usuário ${emailKey} criado no Firebase Auth com a nova senha.`);
+      } catch (createErr: any) {
+        console.error('[FIREBASE] Erro ao criar usuário no Auth ao redefinir:', createErr.message);
+      }
+    }
+
     await logAudit(req, 'Redefinir Senha', `Redefiniu a senha do usuário ${user.nome} (${user.email})`);
 
     resetTokens.delete(emailKey); // use token only once
