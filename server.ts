@@ -162,34 +162,15 @@ async function syncFirestore() {
             loadedData.push(docSnap.data());
           });
           
-          // Mesclagem bidirecional (Merge) para evitar perda de dados locais offline/localizados
-          const localData = (db as any)[coll.key] as any[] || [];
-          const firestoreMap = new Map<string, any>(loadedData.map(item => [String(item.id), item]));
-          const localMap = new Map<string, any>(localData.map(item => [String(item.id), item]));
+          // Ordena os dados e define na memória local
+          loadedData.sort((a, b) => (a.id || 0) - (b.id || 0));
+          (db as any)[coll.key] = loadedData;
           
-          let hasNewLocal = false;
-          // 1. Se um item existe na memória local mas não no Firestore, envia para o Firestore
-          for (const [id, item] of localMap.entries()) {
-            if (!firestoreMap.has(id)) {
-              console.log(`[FIREBASE] Sincronizando item local ausente no Firestore: ${coll.name} ID: ${id}`);
-              await collRef.doc(id).set(item);
-              firestoreMap.set(id, item);
-              hasNewLocal = true;
-            }
-          }
-          
-          // 2. Combina os dados e ordena por ID
-          const merged = Array.from(firestoreMap.values());
-          merged.sort((a, b) => (a.id || 0) - (b.id || 0));
-          (db as any)[coll.key] = merged;
-          
-          if (hasNewLocal) {
-            saveLocalDb();
-          }
+          saveLocalDb();
           
           // Atualizar o nextId
-          if (merged.length > 0) {
-            const maxId = Math.max(...merged.map(item => item.id || 0));
+          if (loadedData.length > 0) {
+            const maxId = Math.max(...loadedData.map(item => item.id || 0));
             const singularKey = coll.key.endsWith('s') ? coll.key.slice(0, -1) : coll.key;
             if ((db.nextId as any)[singularKey] !== undefined) {
               (db.nextId as any)[singularKey] = maxId + 1;
