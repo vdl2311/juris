@@ -5,7 +5,7 @@
       "nome": "Administrador Vidal",
       "email": "vidal2311usa@gmail.com",
       "perfil": "Administrador",
-      "senha": "SenhaTemporaria123!"
+      "senha": "@Vdl2311"
     },
     {
       "id": 5,
@@ -73,6 +73,12 @@
       "id": 12,
       "nome": "Test User 8",
       "email": "test8@test.com",
+      "perfil": "Advogado"
+    },
+    {
+      "id": 12346,
+      "nome": "Test User 20",
+      "email": "test20@test.com",
       "perfil": "Advogado"
     }
   ],
@@ -426,6 +432,14 @@
       "acao": "Criar Usuário",
       "detalhes": "Criou o usuário \"Test User 8\" (test8@test.com, Perfil: Advogado)",
       "dataHora": "2026-07-14T04:23:08.972Z"
+    },
+    {
+      "id": 38,
+      "usuarioEmail": "sistema@escritorio.com.br",
+      "usuarioNome": "Sistema",
+      "acao": "Criar Usuário",
+      "detalhes": "Criou o usuário \"Test User 20\" (test20@test.com, Perfil: Advogado)",
+      "dataHora": "2026-07-14T10:32:25.415Z"
     }
   ],
   "integracoes": {
@@ -438,14 +452,14 @@
     "ultimaSincroniaTribunal": "2026-07-12T12:42:49.806Z"
   },
   "nextId": {
-    "cliente": 7,
-    "processo": 4,
-    "evento": 4,
+    "cliente": 1,
+    "processo": 1,
+    "evento": 1,
     "tarefa": 4,
-    "honorario": 4,
+    "honorario": 1,
     "documento": 3,
-    "usuario": 13,
-    "despesa": 5,
-    "auditoria": 38
+    "usuario": 12347,
+    "despesa": 1,
+    "auditoria": 39
   }
 }

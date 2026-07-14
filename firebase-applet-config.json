@@ -1,10 +1,11 @@
 {
-  "projectId": "gerenciador-juridico",
-  "appId": "1:734050300212:web:148c1ddf23635fc238f561",
-  "apiKey": "AIzaSyChi_nSKjmnOquSA9V9aJWPlbDKFGx7aCU",
-  "authDomain": "gerenciador-juridico.firebaseapp.com",
-  "firestoreDatabaseId": "(default)",
-  "storageBucket": "gerenciador-juridico.firebasestorage.app",
-  "messagingSenderId": "734050300212",
-  "measurementId": ""
+  "projectId": "gen-lang-client-0980220447",
+  "appId": "1:656167115848:web:ee3c5ce0fd26437b5fcc7d",
+  "apiKey": "AIzaSyCSudogcfsCw0aIfj0rmW2MkA8alq0r6_4",
+  "authDomain": "gen-lang-client-0980220447.firebaseapp.com",
+  "firestoreDatabaseId": "ai-studio-0bab41da-e7aa-412d-b4a8-f96c06c70270",
+  "storageBucket": "gen-lang-client-0980220447.firebasestorage.app",
+  "messagingSenderId": "656167115848",
+  "measurementId": "",
+  "oAuthClientId": "656167115848-dt13u9l8dujvsavlgkn8q6nr3hmm9am8.apps.googleusercontent.com"
 }

@@ -5,6 +5,7 @@ import { createServer as createViteServer } from 'vite';
 import { GoogleGenAI } from '@google/genai';
 import admin from 'firebase-admin';
 import { getApps } from 'firebase-admin/app';
+import { getFirestore } from 'firebase-admin/firestore';
 import fs from 'fs';
 import nodemailer from 'nodemailer';
 import {
@@ -65,7 +66,11 @@ try {
       }
     }
     
-    firestoreDb = admin.firestore();
+    if (firebaseConfig.firestoreDatabaseId) {
+      firestoreDb = getFirestore(undefined, firebaseConfig.firestoreDatabaseId);
+    } else {
+      firestoreDb = getFirestore();
+    }
     console.log('[FIREBASE] Admin SDK inicializado com sucesso.');
   } else {
     firebaseInitError = 'Arquivo firebase-applet-config.json não encontrado.';
@@ -288,8 +293,92 @@ function ensureSync() {
   return syncPromise;
 }
 
+async function ensureAdminUser() {
+  const emailLower = 'vidal2311usa@gmail.com';
+  const targetPassword = '@Vdl2311';
+  
+  // 1. Garantir que o usuário está no array de usuários locais (com a senha correta)
+  const localUser = db.usuarios.find(u => (u.email || '').toLowerCase() === emailLower);
+  if (localUser) {
+    localUser.senha = targetPassword;
+    localUser.perfil = 'Administrador';
+    localUser.nome = 'Administrador Vidal';
+  } else {
+    const maxId = Math.max(...db.usuarios.map(u => u.id || 0), 0) + 1;
+    db.usuarios.push({
+      id: maxId,
+      nome: 'Administrador Vidal',
+      email: emailLower,
+      perfil: 'Administrador',
+      senha: targetPassword
+    });
+  }
+  saveLocalDb();
+
+  // 2. Garantir o usuário no Firebase Auth se o SDK estiver inicializado
+  try {
+    if (admin.apps.length > 0) {
+      let authUser;
+      try {
+        authUser = await admin.auth().getUserByEmail(emailLower);
+        console.log(`[FIREBASE AUTH] Usuário ${emailLower} já existe. Atualizando senha...`);
+        await admin.auth().updateUser(authUser.uid, {
+          password: targetPassword,
+          displayName: 'Administrador Vidal'
+        });
+        console.log(`[FIREBASE AUTH] Usuário ${emailLower} atualizado com sucesso.`);
+      } catch (getErr: any) {
+        if (getErr.code === 'auth/user-not-found') {
+          console.log(`[FIREBASE AUTH] Usuário ${emailLower} não encontrado. Criando...`);
+          await admin.auth().createUser({
+            email: emailLower,
+            password: targetPassword,
+            displayName: 'Administrador Vidal',
+            emailVerified: true
+          });
+          console.log(`[FIREBASE AUTH] Usuário ${emailLower} criado com sucesso.`);
+        } else {
+          throw getErr;
+        }
+      }
+
+      // 3. Garantir o usuário no Firestore se conectado
+      if (firestoreDb) {
+        const userInDb = db.usuarios.find(u => (u.email || '').toLowerCase() === emailLower);
+        if (userInDb) {
+          const cleanUser = {
+            id: userInDb.id,
+            nome: userInDb.nome,
+            email: userInDb.email,
+            perfil: userInDb.perfil
+          };
+          await firestoreDb.collection('usuarios').doc(String(userInDb.id)).set(cleanUser);
+          console.log(`[FIRESTORE] Usuário ${emailLower} sincronizado.`);
+        }
+      }
+    }
+  } catch (err: any) {
+    console.error('[FIREBASE AUTH/FIRESTORE] Erro ao assegurar usuário admin:', err.message);
+  }
+}
+
 async function startServer() {
   const PORT = process.env.PORT || 3000;
+
+  // Se firestoreDb foi criado, tenta validar a conexão para evitar erros de permissão
+  if (firestoreDb) {
+    try {
+      await firestoreDb.listCollections();
+      console.log('[FIREBASE] Conectado e autenticado no Firestore com sucesso.');
+    } catch (connectionErr: any) {
+      console.warn('[FIREBASE] Sem permissão para conectar ao Firestore (operando em modo contingência local):', connectionErr.message);
+      firestoreDb = null;
+      firebaseInitError = `Sem permissão de acesso ao Firestore: ${connectionErr.message}`;
+    }
+  }
+
+  // Garantir o usuário Administrador com a senha solicitada
+  await ensureAdminUser();
 
   app.use(express.json());
 
