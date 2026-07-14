@@ -26,10 +26,28 @@ try {
     const firebaseConfig = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
     
     // Inicializa o Admin SDK. Em ambiente Cloud Run, ele usa a Service Account padrão automaticamente.
+    // Em ambientes como o Vercel, podemos passar as credenciais por variável de ambiente.
     if (admin.apps.length === 0) {
-      admin.initializeApp({
-        projectId: firebaseConfig.projectId
-      });
+      const serviceAccountVar = process.env.FIREBASE_SERVICE_ACCOUNT;
+      if (serviceAccountVar) {
+        try {
+          const serviceAccount = JSON.parse(serviceAccountVar);
+          admin.initializeApp({
+            credential: admin.credential.cert(serviceAccount),
+            projectId: firebaseConfig.projectId
+          });
+          console.log('[FIREBASE] Admin SDK inicializado com sucesso usando Service Account fornecida.');
+        } catch (jsonErr: any) {
+          console.error('[FIREBASE] Erro ao analisar FIREBASE_SERVICE_ACCOUNT JSON. Inicializando com padrão:', jsonErr.message);
+          admin.initializeApp({
+            projectId: firebaseConfig.projectId
+          });
+        }
+      } else {
+        admin.initializeApp({
+          projectId: firebaseConfig.projectId
+        });
+      }
     }
     
     firestoreDb = admin.firestore();
