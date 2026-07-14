@@ -19,18 +19,28 @@ const __dirname = path.dirname(__filename);
 
 // Inicialização do Firebase Admin SDK para acesso administrativo ao Firestore
 let firestoreDb: admin.firestore.Firestore | null = null;
+let firebaseInitError: string | null = null;
+let firebaseConfig: any = null;
 
 try {
   const configPath = path.join(process.cwd(), 'firebase-applet-config.json');
   if (fs.existsSync(configPath)) {
-    const firebaseConfig = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+    firebaseConfig = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
     
     // Inicializa o Admin SDK. Em ambiente Cloud Run, ele usa a Service Account padrão automaticamente.
     // Em ambientes como o Vercel, podemos passar as credenciais por variável de ambiente.
     if (admin.apps.length === 0) {
-      const serviceAccountVar = process.env.FIREBASE_SERVICE_ACCOUNT;
+      let serviceAccountVar = process.env.FIREBASE_SERVICE_ACCOUNT;
       if (serviceAccountVar) {
         try {
+          serviceAccountVar = serviceAccountVar.trim();
+          // Remove aspas simples ou duplas extras caso o usuário tenha colado com aspas no Vercel
+          if (serviceAccountVar.startsWith('"') && serviceAccountVar.endsWith('"')) {
+            serviceAccountVar = serviceAccountVar.slice(1, -1);
+          } else if (serviceAccountVar.startsWith("'") && serviceAccountVar.endsWith("'")) {
+            serviceAccountVar = serviceAccountVar.slice(1, -1);
+          }
+          
           const serviceAccount = JSON.parse(serviceAccountVar);
           if (serviceAccount && typeof serviceAccount === 'object' && serviceAccount.private_key) {
             serviceAccount.private_key = serviceAccount.private_key.replace(/\\n/g, '\n');
@@ -41,6 +51,7 @@ try {
           });
           console.log('[FIREBASE] Admin SDK inicializado com sucesso usando Service Account fornecida.');
         } catch (jsonErr: any) {
+          firebaseInitError = `Erro ao analisar JSON da Service Account: ${jsonErr.message}`;
           console.error('[FIREBASE] Erro ao analisar FIREBASE_SERVICE_ACCOUNT JSON. Inicializando com padrão:', jsonErr.message);
           admin.initializeApp({
             projectId: firebaseConfig.projectId
@@ -54,17 +65,13 @@ try {
     }
     
     firestoreDb = admin.firestore();
-    // Configurar databaseId se necessário (geralmente '(default)')
-    if (firebaseConfig.firestoreDatabaseId && firebaseConfig.firestoreDatabaseId !== '(default)') {
-       // O Admin SDK v11+ suporta múltiplos bancos de dados
-       // Mas para o padrão, apenas firestore() já resolve.
-    }
-    
     console.log('[FIREBASE] Admin SDK inicializado com sucesso.');
   } else {
+    firebaseInitError = 'Arquivo firebase-applet-config.json não encontrado.';
     console.warn('[FIREBASE] Arquivo firebase-applet-config.json não encontrado. Operando em memória.');
   }
 } catch (err: any) {
+  firebaseInitError = `Erro global no Firebase Admin: ${err.message}`;
   console.error('[FIREBASE] Erro ao inicializar o Firebase Admin:', err.message);
 }
 
@@ -335,6 +342,35 @@ async function startServer() {
     res.status(201).json({ success: true });
   });
 
+  // === DIAGNÓSTICOS E STATUS ===
+  app.get('/api/firebase-status', async (req, res) => {
+    let pingSuccess = false;
+    let pingError = null;
+    
+    if (firestoreDb) {
+      try {
+        await firestoreDb.collection('config').doc('ping').set({ timestamp: new Date().toISOString() });
+        pingSuccess = true;
+      } catch (pingErr: any) {
+        pingError = pingErr.message;
+      }
+    }
+    
+    res.json({
+      success: true,
+      firebaseInitialized: !!firestoreDb,
+      projectId: firebaseConfig?.projectId || null,
+      hasServiceAccount: !!process.env.FIREBASE_SERVICE_ACCOUNT,
+      serviceAccountLength: process.env.FIREBASE_SERVICE_ACCOUNT ? process.env.FIREBASE_SERVICE_ACCOUNT.length : 0,
+      initError: firebaseInitError,
+      firestorePing: pingSuccess,
+      pingError: pingError,
+      geminiApiKeyConfigured: !!process.env.GEMINI_API_KEY,
+      nodeEnv: process.env.NODE_ENV,
+      vercelEnv: !!process.env.VERCEL
+    });
+  });
+
   // === CLIENTES ===
   app.get('/api/clientes', (_req, res) => {
     res.json({ success: true, data: db.clientes });
@@ -375,32 +411,36 @@ async function startServer() {
       endereco: endereco || '',
       created_at: new Date().toISOString().slice(0, 10),
     };
-    db.clientes.push(newClient);
     try {
       if (firestoreDb) {
         await firestoreDb.collection('clientes').doc(String(newClient.id)).set(newClient);
       }
+      db.clientes.push(newClient);
+      saveLocalDb();
+      await logAudit(req, 'Criar Cliente', `Criou o cliente ${newClient.nome} (ID: ${newClient.id}, Tipo: ${newClient.tipo})`);
+      res.status(201).json({ success: true, message: 'Cliente cadastrado!', data: newClient });
     } catch (err: any) {
       console.error('[FIREBASE] Erro ao salvar cliente:', err.message);
+      res.status(500).json({ success: false, message: 'Erro ao gravar cliente no Firestore: ' + err.message });
     }
-    await logAudit(req, 'Criar Cliente', `Criou o cliente ${newClient.nome} (ID: ${newClient.id}, Tipo: ${newClient.tipo})`);
-    res.status(201).json({ success: true, message: 'Cliente cadastrado!', data: newClient });
   });
 
   app.delete('/api/clientes/:id', async (req, res) => {
     const id = parseInt(req.params.id);
     const clientToDelete = db.clientes.find((c) => c.id === id);
     const clientName = clientToDelete ? clientToDelete.nome : 'Desconhecido';
-    db.clientes = db.clientes.filter((c) => c.id !== id);
     try {
       if (firestoreDb) {
         await firestoreDb.collection('clientes').doc(String(id)).delete();
       }
+      db.clientes = db.clientes.filter((c) => c.id !== id);
+      saveLocalDb();
+      await logAudit(req, 'Deletar Cliente', `Excluiu o cliente ${clientName} (ID: ${id})`);
+      res.json({ success: true, message: 'Cliente excluído com sucesso!' });
     } catch (err: any) {
       console.error('[FIREBASE] Erro ao deletar cliente:', err.message);
+      res.status(500).json({ success: false, message: 'Erro ao excluir cliente no Firestore: ' + err.message });
     }
-    await logAudit(req, 'Deletar Cliente', `Excluiu o cliente ${clientName} (ID: ${id})`);
-    res.json({ success: true });
   });
 
   // === PROCESSOS ===
@@ -813,38 +853,46 @@ async function startServer() {
   });
 
   app.post('/api/usuarios', async (req, res) => {
-    const { nome, email, perfil } = req.body;
+    const { nome, email, perfil, id } = req.body;
     if (!nome || !email || !perfil) {
       res.status(400).json({ success: false, message: 'Campos obrigatórios ausentes.' });
       return;
     }
-    const newUser = { id: db.nextId.usuario++, nome, email, perfil };
-    db.usuarios.push(newUser);
+    const targetId = id ? parseInt(id) : db.nextId.usuario++;
+    if (!id && targetId >= db.nextId.usuario) {
+      db.nextId.usuario = targetId + 1;
+    }
+    const newUser = { id: targetId, nome, email, perfil };
     try {
       if (firestoreDb) {
         await firestoreDb.collection('usuarios').doc(String(newUser.id)).set(newUser);
       }
+      db.usuarios.push(newUser);
+      saveLocalDb();
+      await logAudit(req, 'Criar Usuário', `Criou o usuário "${newUser.nome}" (${newUser.email}, Perfil: ${newUser.perfil})`);
+      res.status(201).json({ success: true, data: newUser });
     } catch (err: any) {
       console.error('[FIREBASE] Erro ao salvar usuário:', err.message);
+      res.status(500).json({ success: false, message: 'Erro ao gravar usuário no Firestore: ' + err.message });
     }
-    await logAudit(req, 'Criar Usuário', `Criou o usuário "${newUser.nome}" (${newUser.email}, Perfil: ${newUser.perfil})`);
-    res.status(201).json({ success: true, data: newUser });
   });
 
   app.delete('/api/usuarios/:id', async (req, res) => {
     const id = parseInt(req.params.id);
     const uToDelete = db.usuarios.find((u) => u.id === id);
     const uEmail = uToDelete ? uToDelete.email : 'Desconhecido';
-    db.usuarios = db.usuarios.filter((u) => u.id !== id);
     try {
       if (firestoreDb) {
         await firestoreDb.collection('usuarios').doc(String(id)).delete();
       }
+      db.usuarios = db.usuarios.filter((u) => u.id !== id);
+      saveLocalDb();
+      await logAudit(req, 'Deletar Usuário', `Excluiu o usuário "${uEmail}" (ID: ${id})`);
+      res.json({ success: true, message: 'Usuário excluído com sucesso!' });
     } catch (err: any) {
       console.error('[FIREBASE] Erro ao deletar usuário:', err.message);
+      res.status(500).json({ success: false, message: 'Erro ao excluir usuário no Firestore: ' + err.message });
     }
-    await logAudit(req, 'Deletar Usuário', `Excluiu o usuário "${uEmail}" (ID: ${id})`);
-    res.json({ success: true });
   });
 
   // Store reset tokens in memory: { email: { token, expires } }

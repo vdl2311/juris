@@ -2510,6 +2510,137 @@ function Integracoes({ update }: any) {
           </div>
         ))}
       </div>
+      <DiagnosticPanel />
+    </div>
+  );
+}
+
+function DiagnosticPanel() {
+  const [status, setStatus] = React.useState<any>(null);
+  const [loading, setLoading] = React.useState(true);
+  const [error, setError] = React.useState<string | null>(null);
+
+  const fetchStatus = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch('/api/firebase-status');
+      if (res.ok) {
+        const data = await res.json();
+        setStatus(data);
+      } else {
+        throw new Error('Erro HTTP ' + res.status);
+      }
+    } catch (err: any) {
+      setError(err.message || 'Erro ao conectar');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  React.useEffect(() => {
+    fetchStatus();
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="bg-slate-50 border rounded-xl p-4 mt-6 text-xs text-slate-500 animate-pulse flex items-center justify-center gap-2">
+        <Clock className="w-4 h-4 animate-spin" />
+        Carregando diagnósticos de infraestrutura...
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="p-4 bg-rose-50 border border-rose-200 rounded-xl text-rose-700 text-xs mt-6 flex gap-2 items-start">
+        <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+        <div>
+          <span className="font-semibold">Erro de diagnóstico:</span> {error}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="bg-slate-50 border rounded-xl p-4 mt-6">
+      <div className="flex justify-between items-center mb-3">
+        <h3 className="font-semibold text-sm text-slate-800">Status da Infraestrutura (Vercel & Banco)</h3>
+        <button onClick={fetchStatus} className="text-xs font-semibold text-indigo-600 hover:text-indigo-800 transition-colors">
+          Atualizar Diagnóstico
+        </button>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+        {/* Firebase Admin / Firestore */}
+        <div className="bg-white p-3 rounded-lg border">
+          <div className="font-semibold text-slate-700 mb-2">Conexão Firestore (Database)</div>
+          <div className="space-y-1.5">
+            <div className="flex justify-between">
+              <span className="text-slate-500">Service Account (Env):</span>
+              <span className={status.hasServiceAccount ? "text-emerald-600 font-semibold" : "text-amber-600 font-semibold"}>
+                {status.hasServiceAccount ? `Configurado (${status.serviceAccountLength} bytes)` : "Não Configurado"}
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-slate-500">Inicializado:</span>
+              <span className={status.firebaseInitialized ? "text-emerald-600 font-semibold" : "text-rose-600 font-semibold"}>
+                {status.firebaseInitialized ? "Sim (Admin SDK)" : "Não"}
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-slate-500">Ping Firestore:</span>
+              <span className={status.firestorePing ? "text-emerald-600 font-semibold" : "text-rose-600 font-semibold"}>
+                {status.firestorePing ? "Sucesso (Escrita/Leitura OK)" : "Falha"}
+              </span>
+            </div>
+            {status.projectId && (
+              <div className="flex justify-between">
+                <span className="text-slate-500">Project ID:</span>
+                <span className="text-slate-700 font-mono text-[10px]">{status.projectId}</span>
+              </div>
+            )}
+            {status.initError && (
+              <div className="mt-2 p-2 bg-rose-50 text-rose-700 rounded text-[10px] break-all leading-tight">
+                <span className="font-semibold">Erro de Inicialização:</span> {status.initError}
+              </div>
+            )}
+            {status.pingError && (
+              <div className="mt-2 p-2 bg-rose-50 text-rose-700 rounded text-[10px] break-all leading-tight">
+                <span className="font-semibold">Erro de Conexão/Regras:</span> {status.pingError}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Gemini API & Environment */}
+        <div className="bg-white p-3 rounded-lg border">
+          <div className="font-semibold text-slate-700 mb-2">Inteligência Artificial (Gemini) & Ambiente</div>
+          <div className="space-y-1.5">
+            <div className="flex justify-between">
+              <span className="text-slate-500">GEMINI_API_KEY:</span>
+              <span className={status.geminiApiKeyConfigured ? "text-emerald-600 font-semibold" : "text-rose-600 font-semibold"}>
+                {status.geminiApiKeyConfigured ? "Configurada" : "Não Configurada"}
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-slate-500">Ambiente de Execução:</span>
+              <span className="text-slate-700 font-semibold">
+                {status.vercelEnv ? "Vercel Serverless" : "Sandbox / Local"}
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-slate-500">NODE_ENV:</span>
+              <span className="text-slate-600 font-mono text-[11px]">{status.nodeEnv}</span>
+            </div>
+          </div>
+          {status.vercelEnv && (
+            <div className="mt-2.5 p-2 bg-blue-50 text-blue-700 rounded text-[10px] leading-tight">
+              <p className="font-semibold mb-0.5">Nota Importante:</p>
+              Qualquer alteração de chaves no painel do Vercel exige um <strong className="underline">novo deploy</strong> para passar a valer!
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
