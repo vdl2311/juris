@@ -1,0 +1,12 @@
+{
+  "name": "Sistema Jurídico Inteligente",
+  "description": "Copiloto IA para Advogados - Gestão de escritório, elaboração de peças, análise de contratos, pesquisa jurídica e estratégia processual",
+  "version": "1.0.0",
+  "framework": "react",
+  "aiProvider": "google-genai",
+  "model": "gemini-3.5-flash",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
