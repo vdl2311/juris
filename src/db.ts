@@ -5,7 +5,7 @@ export const db = {
     { id: 1, nome: 'Administrador Vidal', email: 'vidal2311usa@gmail.com', perfil: 'Administrador', senha: '@Vdl2311' },
     { id: 5, nome: 'Cria2311', email: 'cria2311@gmail.com', perfil: 'Advogado', senha: 'SenhaTemporaria123!' },
     { id: 6, nome: 'BandaVai', email: 'bandavai62@gmail.com', perfil: 'Administrador', senha: 'SenhaTemporaria123!' }
-  ],
+  ] as any[],
   auditoria: [] as any[],
   clientes: [
     { id: 1, tipo: 'PF' as const, nome: 'João Pedro Almeida', doc: '123.456.789-00', contato: '(31) 99888-1122', email: 'joao@email.com', endereco: 'Ipatinga - MG' },
@@ -16,22 +16,22 @@ export const db = {
     { id: 1, numero: '0001234-56.2025.8.13.0313', tribunal: 'TJMG', vara: '2ª Vara Cível', classe: 'Ação de Cobrança', assunto: 'Inadimplência contratual', clienteId: 1, advogadoId: 2, status: 'ativo' as const, valorCausa: 18500, andamentos: [{ data: '2026-06-10', desc: 'Petição inicial protocolada' }, { data: '2026-06-25', desc: 'Citação da parte ré' }] },
     { id: 2, numero: '0007788-12.2024.8.13.0313', tribunal: 'TJMG', vara: '1ª Vara do Trabalho', classe: 'Reclamação Trabalhista', assunto: 'Horas extras', clienteId: 2, advogadoId: 2, status: 'ativo' as const, valorCausa: 42000, andamentos: [{ data: '2026-05-02', desc: 'Audiência realizada' }, { data: '2026-06-30', desc: 'Aguardando sentença' }] },
     { id: 3, numero: '0003321-77.2023.8.13.0313', tribunal: 'TJMG', vara: '3ª Vara Cível', classe: 'Divórcio', assunto: 'Divórcio consensual', clienteId: 3, advogadoId: 2, status: 'encerrado' as const, valorCausa: 0, andamentos: [{ data: '2026-01-15', desc: 'Sentença homologatória' }] },
-  ],
+  ] as any[],
   eventos: [
     { id: 1, tipo: 'Audiência' as const, processoId: 2, data: addDays(2), hora: '14:00', local: 'Fórum de Timóteo - Sala 3' },
     { id: 2, tipo: 'Prazo' as const, processoId: 1, data: addDays(1), hora: '23:59', local: 'Contestação' },
     { id: 3, tipo: 'Reunião' as const, processoId: 1, data: addDays(5), hora: '10:00', local: 'Escritório' },
-  ],
+  ] as any[],
   tarefas: [
     { id: 1, titulo: 'Elaborar contestação', responsavelId: 2, processoId: 1, prioridade: 'alta' as const, status: 'pendente' as const, prazo: addDays(1) },
     { id: 2, titulo: 'Levantar jurisprudência TST', responsavelId: 3, processoId: 2, prioridade: 'media' as const, status: 'andamento' as const, prazo: addDays(4) },
     { id: 3, titulo: 'Organizar documentos', responsavelId: 4, processoId: null, prioridade: 'baixa' as const, status: 'pendente' as const, prazo: addDays(7) },
-  ],
+  ] as any[],
   honorarios: [
     { id: 1, processoId: 1, clienteId: 1, valor: 3500, tipo: 'fixo' as const, status: 'pendente' as const, vencimento: addDays(6) },
     { id: 2, processoId: 2, clienteId: 2, valor: 8000, tipo: 'exito' as const, status: 'pago' as const, vencimento: addDays(-10) },
     { id: 3, processoId: 3, clienteId: 3, valor: 1200, tipo: 'fixo' as const, status: 'atrasado' as const, vencimento: addDays(-15) },
-  ],
+  ] as any[],
   despesas: [
     { id: 1, descricao: 'Aluguel do escritório', valor: 2800, vencimento: addDays(3), status: 'pendente' as const },
     { id: 2, descricao: 'Custas processuais', valor: 340, vencimento: addDays(-2), status: 'pago' as const },
@@ -39,7 +39,7 @@ export const db = {
   documentos: [
     { id: 1, nome: 'Contrato de honorários - João Pedro.pdf', clienteId: 1, processoId: 1, data: addDays(-20), assinatura: 'assinado', origem: 'upload' },
     { id: 2, nome: 'Procuração - Metalúrgica Vale.pdf', clienteId: 2, processoId: 2, data: addDays(-40), assinatura: 'pendente', origem: 'upload' },
-  ],
+  ] as any[],
   integracoes: {
     whatsapp: true, email: true, tribunal: true, ocr: true, assinatura: true,
     ultimoBackup: new Date(Date.now() - 3 * 3600 * 1000).toISOString(),

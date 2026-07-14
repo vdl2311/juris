@@ -129,7 +129,7 @@ export default function App() {
 
     const clientes = db.clientes.filter(c => c.nome.toLowerCase().includes(q) || c.doc.includes(q)).slice(0, 5);
     const processos = db.processos.filter(p => p.numero.includes(q) || (p.classe || '').toLowerCase().includes(q)).slice(0, 5);
-    const tarefas = db.tarefas.filter(t => t.titulo.toLowerCase().includes(q) || (t.responsavel || '').toLowerCase().includes(q)).slice(0, 5);
+    const tarefas = db.tarefas.filter(t => t.titulo.toLowerCase().includes(q) || usuarioNome(t.responsavelId).toLowerCase().includes(q)).slice(0, 5);
 
     return { modulos, clientes, processos, tarefas };
   }, [globalSearchQuery, page]);
@@ -521,7 +521,7 @@ export default function App() {
                             className="w-full text-left px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 hover:text-slate-900 rounded-lg flex flex-col transition-colors cursor-pointer"
                           >
                             <span className="font-semibold">{t.titulo}</span>
-                            <span className="text-[10px] text-slate-400">Responsável: {t.responsavel}</span>
+                            <span className="text-[10px] text-slate-400">Responsável: {usuarioNome(t.responsavelId)}</span>
                           </button>
                         ))}
                       </div>
@@ -1370,7 +1370,7 @@ function ProcessoDetalhe({ id, setViewingProcesso, update }: any) {
       <div className="bg-white border rounded-xl p-5">
         <h3 className="font-semibold mb-4">Andamentos</h3>
         <div className="border-l-2 border-slate-200 pl-4 space-y-3">
-          {p.andamentos.map((a, i) => (
+          {(p.andamentos || []).map((a: any, i: number) => (
             <div key={i} className="relative">
               <div className="absolute -left-[21px] top-1 w-2.5 h-2.5 rounded-full bg-amber-500" />
               <div className="text-xs text-slate-500">{fmtDate(a.data)}</div>
@@ -2769,111 +2769,118 @@ function Usuarios({ confirmAction }: any) {
   const carregarUsuarios = async () => {
     setLoading(true);
     let loadedUsers: any[] = [];
+    
+    // 1. Priorizar carregamento via API do backend Express
     try {
-      // Carregar diretamente do Firestore do cliente
-      const { collection, getDocs, doc, setDoc, deleteDoc } = await import('firebase/firestore');
-      const { firestore } = await import('./firebase');
-      
-      const snap = await getDocs(collection(firestore, 'usuarios'));
-      const list: any[] = [];
-      snap.forEach((docSnap) => {
-        const d = docSnap.data();
-        list.push({ ...d, id: docSnap.id.match(/^\d+$/) ? parseInt(docSnap.id) : docSnap.id });
-      });
+      const res = await fetch('/api/usuarios');
+      const data = await res.json();
+      if (data.success && data.data) {
+        loadedUsers = data.data;
+      }
+    } catch (err) {
+      console.warn('Erro ao carregar do Express backend, tentando Firestore cliente-side...', err);
+    }
 
-      // Agrupar por e-mail para detectar e tratar duplicados
-      const usersByEmail: { [email: string]: any[] } = {};
-      list.forEach((u) => {
-        const emailLower = (u.email || '').toLowerCase().trim();
-        if (emailLower) {
-          if (!usersByEmail[emailLower]) {
-            usersByEmail[emailLower] = [];
+    // 2. Fallback: carregar diretamente do Firestore do cliente
+    if (loadedUsers.length === 0) {
+      try {
+        const { collection, getDocs, doc, setDoc, deleteDoc } = await import('firebase/firestore');
+        const { firestore } = await import('./firebase');
+        
+        const snap = await getDocs(collection(firestore, 'usuarios'));
+        const list: any[] = [];
+        snap.forEach((docSnap) => {
+          const d = docSnap.data();
+          list.push({ ...d, id: docSnap.id.match(/^\d+$/) ? parseInt(docSnap.id) : docSnap.id });
+        });
+
+        // Agrupar por e-mail para detectar e tratar duplicados
+        const usersByEmail: { [email: string]: any[] } = {};
+        list.forEach((u) => {
+          const emailLower = (u.email || '').toLowerCase().trim();
+          if (emailLower) {
+            if (!usersByEmail[emailLower]) {
+              usersByEmail[emailLower] = [];
+            }
+            usersByEmail[emailLower].push(u);
           }
-          usersByEmail[emailLower].push(u);
-        }
-      });
+        });
 
-      const uniqueList: any[] = [];
-      for (const email of Object.keys(usersByEmail)) {
-        const dupes = usersByEmail[email];
-        if (dupes.length === 1) {
-          uniqueList.push(dupes[0]);
-        } else {
-          // Escolher o ID correto a manter (IDs numéricos pequenos como 1, 5, 6 ou o menor ID)
-          const sorted = [...dupes].sort((a, b) => {
-            const aIdNum = typeof a.id === 'number' ? a.id : parseInt(String(a.id)) || 9999999999999;
-            const bIdNum = typeof b.id === 'number' ? b.id : parseInt(String(b.id)) || 9999999999999;
-            return aIdNum - bIdNum;
-          });
+        const uniqueList: any[] = [];
+        for (const email of Object.keys(usersByEmail)) {
+          const dupes = usersByEmail[email];
+          if (dupes.length === 1) {
+            uniqueList.push(dupes[0]);
+          } else {
+            // Escolher o ID correto a manter (IDs numéricos pequenos como 1, 5, 6 ou o menor ID)
+            const sorted = [...dupes].sort((a, b) => {
+              const aIdNum = typeof a.id === 'number' ? a.id : parseInt(String(a.id)) || 9999999999999;
+              const bIdNum = typeof b.id === 'number' ? b.id : parseInt(String(b.id)) || 9999999999999;
+              return aIdNum - bIdNum;
+            });
 
-          const keep = sorted[0];
-          uniqueList.push(keep);
+            const keep = sorted[0];
+            uniqueList.push(keep);
 
-          // Remover os demais documentos duplicados do Firestore
-          for (let i = 1; i < sorted.length; i++) {
-            const toDelete = sorted[i];
-            try {
-              console.log(`[DE-DUP] Removendo duplicado do Firestore. Email: ${email}, ID: ${toDelete.id}`);
-              await deleteDoc(doc(firestore, 'usuarios', String(toDelete.id)));
-            } catch (delErr) {
-              console.error('Erro ao deletar duplicado:', delErr);
+            // Remover os demais documentos duplicados do Firestore
+            for (let i = 1; i < sorted.length; i++) {
+              const toDelete = sorted[i];
+              try {
+                console.log(`[DE-DUP] Removendo duplicado do Firestore. Email: ${email}, ID: ${toDelete.id}`);
+                await deleteDoc(doc(firestore, 'usuarios', String(toDelete.id)));
+              } catch (delErr) {
+                console.error('Erro ao deletar duplicado:', delErr);
+              }
             }
           }
         }
-      }
 
-      // Garantir que cria2311@gmail.com está cadastrado com ID correto (5)
-      const temCria = uniqueList.some(u => (u.email || '').toLowerCase() === 'cria2311@gmail.com');
-      if (!temCria) {
-        const idCria = 5;
-        const userCria = {
-          id: idCria,
-          nome: 'Cria2311',
-          email: 'cria2311@gmail.com',
-          perfil: 'Advogado'
-        };
-        await setDoc(doc(firestore, 'usuarios', String(idCria)), userCria);
-        uniqueList.push(userCria);
-      }
-
-      // Garantir que bandavai62@gmail.com está cadastrado com ID correto (6)
-      const temBanda = uniqueList.some(u => (u.email || '').toLowerCase() === 'bandavai62@gmail.com');
-      if (!temBanda) {
-        const idBanda = 6;
-        const userBanda = {
-          id: idBanda,
-          nome: 'BandaVai',
-          email: 'bandavai62@gmail.com',
-          perfil: 'Administrador'
-        };
-        await setDoc(doc(firestore, 'usuarios', String(idBanda)), userBanda);
-        uniqueList.push(userBanda);
-      }
-
-      uniqueList.sort((a, b) => (a.id || 0) - (b.id || 0));
-      loadedUsers = uniqueList;
-    } catch (errFirestore) {
-      console.warn('Erro ao carregar do Firestore cliente-side, tentando API...', errFirestore);
-    }
-
-    if (loadedUsers.length > 0) {
-      setUsuarios(loadedUsers);
-      db.usuarios = loadedUsers;
-      setLoading(false);
-    } else {
-      try {
-        const res = await fetch('/api/usuarios');
-        const data = await res.json();
-        if (data.success) {
-          setUsuarios(data.data || []);
-          db.usuarios = data.data || [];
+        // Garantir que cria2311@gmail.com está cadastrado com ID correto (5)
+        const temCria = uniqueList.some(u => (u.email || '').toLowerCase() === 'cria2311@gmail.com');
+        if (!temCria) {
+          const idCria = 5;
+          const userCria = {
+            id: idCria,
+            nome: 'Cria2311',
+            email: 'cria2311@gmail.com',
+            perfil: 'Advogado'
+          };
+          try {
+            await setDoc(doc(firestore, 'usuarios', String(idCria)), userCria);
+          } catch (err) {
+            console.warn('Erro ao salvar cria no Firestore cliente-side:', err);
+          }
+          uniqueList.push(userCria);
         }
-      } catch (err) {
-        console.error('Erro ao carregar usuários do banco:', err);
-      } finally {
-        setLoading(false);
+
+        // Garantir que bandavai62@gmail.com está cadastrado com ID correto (6)
+        const temBanda = uniqueList.some(u => (u.email || '').toLowerCase() === 'bandavai62@gmail.com');
+        if (!temBanda) {
+          const idBanda = 6;
+          const userBanda = {
+            id: idBanda,
+            nome: 'BandaVai',
+            email: 'bandavai62@gmail.com',
+            perfil: 'Administrador'
+          };
+          try {
+            await setDoc(doc(firestore, 'usuarios', String(idBanda)), userBanda);
+          } catch (err) {
+            console.warn('Erro ao salvar bandavai no Firestore cliente-side:', err);
+          }
+          uniqueList.push(userBanda);
+        }
+
+        uniqueList.sort((a, b) => (a.id || 0) - (b.id || 0));
+        loadedUsers = uniqueList;
+      } catch (errFirestore) {
+        console.warn('Erro ao carregar do Firestore cliente-side:', errFirestore);
       }
     }
+
+    setUsuarios(loadedUsers);
+    db.usuarios = loadedUsers;
+    setLoading(false);
   };
 
   useEffect(() => {
@@ -2901,7 +2908,6 @@ function Usuarios({ confirmAction }: any) {
       };
       
       const password = generateSecurePassword();
-      
       const userId = Date.now();
       const userDoc = {
         id: userId,
@@ -2910,15 +2916,9 @@ function Usuarios({ confirmAction }: any) {
         perfil: novoUsuario.perfil
       };
 
-      // Salvar diretamente no Firestore do cliente
-      try {
-        const { doc, setDoc } = await import('firebase/firestore');
-        const { firestore } = await import('./firebase');
-        await setDoc(doc(firestore, 'usuarios', String(userId)), userDoc);
-      } catch (errFirestore) {
-        console.error('Erro ao salvar no Firestore cliente-side:', errFirestore);
-      }
-      
+      let createdSuccessfully = false;
+
+      // 1. Tentar criar no backend primeiro (seguro e gerencia o Auth)
       try {
         const res = await fetch('/api/usuarios', {
           method: 'POST',
@@ -2930,22 +2930,38 @@ function Usuarios({ confirmAction }: any) {
           if (contentType && contentType.includes('application/json')) {
             const data = await res.json();
             if (data.success) {
-              // Sincronizar dados locais com o que o backend retornou
-              console.log('Usuário sincronizado com o backend com sucesso.');
+              createdSuccessfully = true;
+              console.log('Usuário criado e sincronizado com o backend com sucesso.');
             }
           }
         }
       } catch (errApi) {
-        console.warn('Erro ao sincronizar usuário com o Express backend, mas foi salvo no Firestore:', errApi);
+        console.warn('Erro ao sincronizar usuário com o Express backend, tentando Firestore direto...', errApi);
       }
 
-      const updatedUsers = [...usuarios, userDoc];
-      setUsuarios(updatedUsers);
-      db.usuarios = updatedUsers;
-      setNovoUsuario({ nome: '', email: '', perfil: 'Advogado' });
-      setShowForm(false);
-      const successMsg = `Usuário criado com sucesso! Senha temporária: ${password}`;
-      setStatus({ type: 'success', message: successMsg });
+      // 2. Fallback: Salvar diretamente no Firestore do cliente
+      if (!createdSuccessfully) {
+        try {
+          const { doc, setDoc } = await import('firebase/firestore');
+          const { firestore } = await import('./firebase');
+          await setDoc(doc(firestore, 'usuarios', String(userId)), userDoc);
+          createdSuccessfully = true;
+        } catch (errFirestore) {
+          console.error('Erro ao salvar no Firestore cliente-side:', errFirestore);
+        }
+      }
+
+      if (createdSuccessfully) {
+        const updatedUsers = [...usuarios, userDoc];
+        setUsuarios(updatedUsers);
+        db.usuarios = updatedUsers;
+        setNovoUsuario({ nome: '', email: '', perfil: 'Advogado' });
+        setShowForm(false);
+        const successMsg = `Usuário criado com sucesso! Senha temporária: ${password}`;
+        setStatus({ type: 'success', message: successMsg });
+      } else {
+        setStatus({ type: 'error', message: 'Erro ao criar usuário no servidor e no banco local.' });
+      }
     } catch (err: any) {
       console.error('Erro ao criar usuário:', err);
       setStatus({ type: 'error', message: 'Erro ao criar usuário: ' + (err.message || 'Erro desconhecido') });
@@ -2957,18 +2973,30 @@ function Usuarios({ confirmAction }: any) {
       'Excluir Usuário',
       'Deseja realmente remover o acesso deste usuário do sistema?',
       async () => {
+        let deletedSuccessfully = false;
+
+        // 1. Tentar excluir via API do backend primeiro (seguro e gerencia o Firestore + Auth)
         try {
-          const { doc, deleteDoc } = await import('firebase/firestore');
-          const { firestore } = await import('./firebase');
-          await deleteDoc(doc(firestore, 'usuarios', String(id)));
-        } catch (errFirestore) {
-          console.error('Erro ao excluir no Firestore cliente-side:', errFirestore);
-        }
-        try {
-          await fetch(`/api/usuarios/${id}`, { method: 'DELETE' });
+          const res = await fetch(`/api/usuarios/${id}`, { method: 'DELETE' });
+          if (res.ok) {
+            deletedSuccessfully = true;
+          }
         } catch (errApi) {
-          console.warn('Erro ao notificar exclusão ao backend Express, mas foi removido do Firestore:', errApi);
+          console.warn('Erro ao notificar exclusão ao backend Express, tentando Firestore cliente-side...', errApi);
         }
+
+        // 2. Fallback: tentar deletar no Firestore do cliente-side
+        if (!deletedSuccessfully) {
+          try {
+            const { doc, deleteDoc } = await import('firebase/firestore');
+            const { firestore } = await import('./firebase');
+            await deleteDoc(doc(firestore, 'usuarios', String(id)));
+            deletedSuccessfully = true;
+          } catch (errFirestore) {
+            console.error('Erro ao excluir no Firestore cliente-side:', errFirestore);
+          }
+        }
+
         const updatedUsers = usuarios.filter((u) => u.id !== id);
         setUsuarios(updatedUsers);
         db.usuarios = updatedUsers;

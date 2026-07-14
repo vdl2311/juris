@@ -5,7 +5,8 @@ import { createServer as createViteServer } from 'vite';
 import { GoogleGenAI } from '@google/genai';
 import admin from 'firebase-admin';
 import { getApps } from 'firebase-admin/app';
-import { getFirestore } from 'firebase-admin/firestore';
+import { getFirestore, Firestore } from 'firebase-admin/firestore';
+import { getAuth } from 'firebase-admin/auth';
 import fs from 'fs';
 import nodemailer from 'nodemailer';
 import {
@@ -20,7 +21,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // Inicialização do Firebase Admin SDK para acesso administrativo ao Firestore
-let firestoreDb: admin.firestore.Firestore | null = null;
+let firestoreDb: Firestore | null = null;
 let firebaseInitError: string | null = null;
 let firebaseConfig: any = null;
 
@@ -48,7 +49,7 @@ try {
             serviceAccount.private_key = serviceAccount.private_key.replace(/\\n/g, '\n');
           }
           admin.initializeApp({
-            credential: admin.credential.cert(serviceAccount),
+            credential: (admin as any).credential.cert(serviceAccount),
             projectId: firebaseConfig.projectId
           });
           console.log('[FIREBASE] Admin SDK inicializado com sucesso usando Service Account fornecida.');
@@ -67,7 +68,7 @@ try {
     }
     
     if (firebaseConfig.firestoreDatabaseId) {
-      firestoreDb = getFirestore(undefined, firebaseConfig.firestoreDatabaseId);
+      firestoreDb = getFirestore(getApps()[0] || undefined as any, firebaseConfig.firestoreDatabaseId);
     } else {
       firestoreDb = getFirestore();
     }
@@ -170,10 +171,101 @@ async function syncFirestore() {
           }
         } else {
           console.log(`[FIREBASE] Carregando '${coll.name}' do Firestore...`);
-          const loadedData: any[] = [];
-          snap.forEach((docSnap) => {
+          let loadedData: any[] = [];
+          snap.forEach((docSnap: any) => {
             loadedData.push(docSnap.data());
           });
+          
+          // Realizar a limpeza e de-duplicação de usuários no Firestore se a coleção contiver duplicatas
+          if (coll.name === 'usuarios') {
+            console.log('[FIREBASE] Executando rotina de limpeza e de-duplicação de usuários...');
+            
+            const emailGroups: { [email: string]: any[] } = {};
+            loadedData.forEach((u) => {
+              const email = (u.email || '').toLowerCase().trim();
+              if (email) {
+                if (!emailGroups[email]) emailGroups[email] = [];
+                emailGroups[email].push(u);
+              }
+            });
+            
+            const uniqueUsersToKeep: any[] = [];
+            const idsToDelete = new Set<string>();
+            const docsToWrite = new Map<string, any>();
+            
+            for (const email of Object.keys(emailGroups)) {
+              const dupes = emailGroups[email];
+              if (dupes.length === 1) {
+                uniqueUsersToKeep.push(dupes[0]);
+              } else {
+                dupes.sort((a, b) => {
+                  const aId = typeof a.id === 'number' ? a.id : parseInt(String(a.id)) || 999999;
+                  const bId = typeof b.id === 'number' ? b.id : parseInt(String(b.id)) || 999999;
+                  if (email === 'vidal2311usa@gmail.com') {
+                    if (aId === 1) return -1;
+                    if (bId === 1) return 1;
+                  }
+                  if (email === 'cria2311@gmail.com') {
+                    if (aId === 5) return -1;
+                    if (bId === 5) return 1;
+                  }
+                  if (email === 'bandavai62@gmail.com') {
+                    if (aId === 6) return -1;
+                    if (bId === 6) return 1;
+                  }
+                  return aId - bId;
+                });
+                
+                const keep = dupes[0];
+                uniqueUsersToKeep.push(keep);
+                
+                for (let i = 1; i < dupes.length; i++) {
+                  idsToDelete.add(String(dupes[i].id));
+                }
+              }
+            }
+            
+            const usedIds = new Set<number>();
+            let nextUnusedId = 15;
+            const finalUsers: any[] = [];
+            
+            for (const u of uniqueUsersToKeep) {
+              let currentId = typeof u.id === 'number' ? u.id : parseInt(String(u.id)) || nextUnusedId++;
+              
+              if (usedIds.has(currentId)) {
+                const emailLower = (u.email || '').toLowerCase().trim();
+                if (emailLower === 'vidal2311usa@gmail.com') currentId = 1;
+                else if (emailLower === 'cria2311@gmail.com') currentId = 5;
+                else if (emailLower === 'bandavai62@gmail.com') currentId = 6;
+                else {
+                  while (usedIds.has(nextUnusedId)) {
+                    nextUnusedId++;
+                  }
+                  currentId = nextUnusedId++;
+                }
+              }
+              
+              usedIds.add(currentId);
+              const finalUser = { ...u, id: currentId };
+              finalUsers.push(finalUser);
+              
+              if (String(u.id) !== String(currentId)) {
+                idsToDelete.add(String(u.id));
+                docsToWrite.set(String(currentId), finalUser);
+              }
+            }
+            
+            for (const idDel of idsToDelete) {
+              console.log(`[DE-DUP STARTUP] Removendo documento de usuário ID ${idDel} do Firestore.`);
+              await collRef.doc(idDel).delete().catch(() => null);
+            }
+            for (const [idWrite, docData] of docsToWrite.entries()) {
+              console.log(`[DE-DUP STARTUP] Gravando documento de usuário ID ${idWrite} com e-mail ${docData.email}.`);
+              await collRef.doc(idWrite).set(docData).catch(() => null);
+            }
+            
+            loadedData = finalUsers;
+          }
           
           // Ordena os dados e define na memória local
           loadedData.sort((a, b) => (a.id || 0) - (b.id || 0));
@@ -204,7 +296,7 @@ async function syncFirestore() {
     // Sincronizar usuários do Firebase Auth com a coleção 'usuarios' do Firestore
     try {
       console.log('[FIREBASE] Sincronizando usuários do Firebase Auth...');
-      const authUsers = await admin.auth().listUsers();
+      const authUsers = await getAuth().listUsers();
       const existingEmails = new Set(db.usuarios.map(u => (u.email || '').toLowerCase()));
       let maxId = Math.max(...db.usuarios.map(u => u.id || 0), 0);
 
@@ -329,12 +421,12 @@ async function ensureAdminUser() {
 
   // 2. Garantir o usuário no Firebase Auth se o SDK estiver inicializado
   try {
-    if (admin.apps.length > 0) {
+    if (getApps().length > 0) {
       let authUser;
       try {
-        authUser = await admin.auth().getUserByEmail(emailLower);
+        authUser = await getAuth().getUserByEmail(emailLower);
         console.log(`[FIREBASE AUTH] Usuário ${emailLower} já existe. Atualizando senha...`);
-        await admin.auth().updateUser(authUser.uid, {
+        await getAuth().updateUser(authUser.uid, {
           password: targetPassword,
           displayName: 'Administrador Vidal'
         });
@@ -342,7 +434,7 @@ async function ensureAdminUser() {
       } catch (getErr: any) {
         if (getErr.code === 'auth/user-not-found') {
           console.log(`[FIREBASE AUTH] Usuário ${emailLower} não encontrado. Criando...`);
-          await admin.auth().createUser({
+          await getAuth().createUser({
             email: emailLower,
             password: targetPassword,
             displayName: 'Administrador Vidal',
@@ -375,7 +467,7 @@ async function ensureAdminUser() {
 }
 
 async function startServer() {
-  const PORT = process.env.PORT || 3000;
+  const PORT = parseInt(process.env.PORT || '3000', 10);
 
   // Se firestoreDb foi criado, tenta validar a conexão para evitar erros de permissão
   if (firestoreDb) {
@@ -918,7 +1010,7 @@ async function startServer() {
   app.get('/api/usuarios', async (_req, res) => {
     if (firestoreDb) {
       try {
-        const authUsers = await admin.auth().listUsers();
+        const authUsers = await getAuth().listUsers();
         const existingEmails = new Set(db.usuarios.map(u => (u.email || '').toLowerCase()));
         let maxId = Math.max(...db.usuarios.map(u => u.id || 0), 0);
 
@@ -970,7 +1062,7 @@ async function startServer() {
         // Tentar criar no Firebase Auth se não existir
         try {
           const tempPassword = senha || Math.random().toString(36).slice(-10) + 'A1!';
-          await admin.auth().createUser({
+          await getAuth().createUser({
             email: email.toLowerCase().trim(),
             password: tempPassword,
             displayName: nome
@@ -1013,12 +1105,12 @@ async function startServer() {
     if (firestoreDb) {
       try {
         try {
-          await admin.auth().getUserByEmail(emailLower);
+          await getAuth().getUserByEmail(emailLower);
           console.log(`[FIREBASE] Usuário ${emailLower} já existe no Firebase Auth.`);
         } catch (authErr: any) {
           if (authErr.code === 'auth/user-not-found') {
             const tempPassword = Math.random().toString(36).slice(-10) + 'A1!';
-            await admin.auth().createUser({
+            await getAuth().createUser({
               email: emailLower,
               password: tempPassword,
               displayName: user.nome || emailLower.split('@')[0],
@@ -1240,7 +1332,7 @@ async function startServer() {
       return;
     }
     const client = db.clientes.find((c) => c.id === proc.clienteId);
-    const andamentosText = proc.andamentos.map((a) => `- [${a.data}] ${a.desc}`).join('\n');
+    const andamentosText = (proc.andamentos || []).map((a: any) => `- [${a.data}] ${a.desc}`).join('\n');
 
     const prompt = `Como assistente jurídico, elabore um resumo executivo deste processo:
 Número: ${proc.numero}

@@ -58,9 +58,16 @@ export default function ProcessoFormModal({ clientes, advogados, onClose, onSucc
         const { doc: fireDoc, setDoc } = await import('firebase/firestore');
         const { firestore } = await import('../firebase');
 
-        const newProcess = {
-          ...form,
+        const newProcess: Processo = {
           id: Date.now(),
+          numero: form.numero,
+          tribunal: form.tribunal,
+          vara: form.vara,
+          classe: form.classe,
+          assunto: form.assunto,
+          clienteId: parseInt(form.clienteId, 10),
+          advogadoId: parseInt(form.advogadoId, 10),
+          valorCausa: parseFloat(form.valorCausa) || 0,
           status: 'ativo',
           andamentos: []
         };
