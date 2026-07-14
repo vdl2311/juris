@@ -32,6 +32,9 @@ try {
       if (serviceAccountVar) {
         try {
           const serviceAccount = JSON.parse(serviceAccountVar);
+          if (serviceAccount && typeof serviceAccount === 'object' && serviceAccount.private_key) {
+            serviceAccount.private_key = serviceAccount.private_key.replace(/\\n/g, '\n');
+          }
           admin.initializeApp({
             credential: admin.credential.cert(serviceAccount),
             projectId: firebaseConfig.projectId
@@ -282,10 +285,36 @@ function getGenAI(): GoogleGenAI {
 
 const app = express();
 
+let syncPromise: Promise<void> | null = null;
+
+function ensureSync() {
+  if (!syncPromise) {
+    console.log('[FIREBASE] Iniciando sincronização do banco com Firestore...');
+    syncPromise = syncFirestore().catch((err) => {
+      console.error('[FIREBASE] Falha crítica na sincronização inicial:', err.message);
+      syncPromise = null; // permite retentar na próxima requisição
+      throw err;
+    });
+  }
+  return syncPromise;
+}
+
 async function startServer() {
   const PORT = process.env.PORT || 3000;
 
   app.use(express.json());
+
+  // Middleware para garantir sincronização antes de qualquer requisição de API
+  app.use(async (req, res, next) => {
+    if (req.path.startsWith('/api')) {
+      try {
+        await ensureSync();
+      } catch (err: any) {
+        console.error('[MIDDLEWARE] Erro ao aguardar sincronização do banco:', err.message);
+      }
+    }
+    next();
+  });
 
   async function logAudit(req: express.Request, acao: string, detalhes: string) {
     const usuarioEmail = req.headers['x-user-email'] as string || 'sistema@escritorio.com.br';
