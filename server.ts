@@ -31,7 +31,13 @@ function initFirebaseAdmin() {
   adminInitialized = true;
 
   try {
-    const configPath = path.join(process.cwd(), 'firebase-applet-config.json');
+    let configPath = path.join(process.cwd(), 'firebase-applet-config.json');
+    if (!fs.existsSync(configPath)) {
+      configPath = path.join(__dirname, '..', 'firebase-applet-config.json');
+    }
+    if (!fs.existsSync(configPath)) {
+      configPath = path.join(__dirname, 'firebase-applet-config.json');
+    }
     if (fs.existsSync(configPath)) {
       firebaseConfig = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
       
@@ -126,7 +132,13 @@ function loadLocalDb() {
   try {
     let pathToRead = LOCAL_DB_PATH;
     if (process.env.VERCEL && !fs.existsSync(pathToRead)) {
-      const rootDbPath = path.join(process.cwd(), 'db_local.json');
+      let rootDbPath = path.join(process.cwd(), 'db_local.json');
+      if (!fs.existsSync(rootDbPath)) {
+        rootDbPath = path.join(__dirname, '..', 'db_local.json');
+      }
+      if (!fs.existsSync(rootDbPath)) {
+        rootDbPath = path.join(__dirname, 'db_local.json');
+      }
       if (fs.existsSync(rootDbPath)) {
         pathToRead = rootDbPath;
         console.log('[LOCAL DB] Usando db_local.json do diretório raiz em ambiente Vercel.');
@@ -303,7 +315,16 @@ async function syncFirestore() {
             await res.collRef.doc(idWrite).set(docData).catch(() => null);
           }
           
-          loadedData = finalUsers;
+          loadedData = finalUsers.map(u => {
+            const emailLower = (u.email || '').toLowerCase().trim();
+            let senha = u.senha;
+            if (!senha) {
+              if (emailLower === 'vidal2311usa@gmail.com') senha = '@Vdl2311';
+              else if (emailLower === 'cria2311@gmail.com') senha = 'SenhaTemporaria123!';
+              else if (emailLower === 'bandavai62@gmail.com') senha = 'SenhaTemporaria123!';
+            }
+            return { ...u, senha };
+          });
         }
         
         // Ordena os dados e define na memória local
@@ -623,7 +644,8 @@ async function ensureAdminUser() {
             id: userInDb.id,
             nome: userInDb.nome,
             email: userInDb.email,
-            perfil: userInDb.perfil
+            perfil: userInDb.perfil,
+            senha: userInDb.senha || '@Vdl2311'
           };
           await firestoreDb.collection('usuarios').doc(String(userInDb.id)).set(cleanUser);
           console.log(`[FIRESTORE] Usuário ${emailLower} sincronizado.`);
@@ -1219,12 +1241,12 @@ app.use(async (req, res, next) => {
     if (!id && targetId >= db.nextId.usuario) {
       db.nextId.usuario = targetId + 1;
     }
-    const newUser = { id: targetId, nome, email, perfil };
+    const tempPassword = senha || Math.random().toString(36).slice(-10) + 'A1!';
+    const newUser = { id: targetId, nome, email, perfil, senha: tempPassword };
     try {
       if (firestoreDb) {
         // Tentar criar no Firebase Auth se não existir
         try {
-          const tempPassword = senha || Math.random().toString(36).slice(-10) + 'A1!';
           await getAuth().createUser({
             email: email.toLowerCase().trim(),
             password: tempPassword,
