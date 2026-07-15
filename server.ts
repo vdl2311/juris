@@ -685,14 +685,14 @@ async function startServer() {
 // Inicializar middlewares e rotas de forma síncrona/imediata no nível do módulo (para Vercel Serverless)
 app.use(express.json());
 
-// Middleware para garantir sincronização antes de qualquer requisição de API
-app.use(async (req, res, next) => {
+// Middleware para garantir sincronização de forma não-bloqueante
+app.use((req, res, next) => {
     if (req.path.startsWith('/api')) {
-      try {
-        await ensureSync();
-      } catch (err: any) {
-        console.error('[MIDDLEWARE] Erro ao aguardar sincronização do banco:', err.message);
-      }
+      // Executa a sincronização em segundo plano de forma não-bloqueante
+      // para evitar timeouts e lentidão de rede em ambientes como o Vercel.
+      ensureSync().catch((err: any) => {
+        console.error('[MIDDLEWARE] Erro ao sincronizar o banco em segundo plano:', err.message);
+      });
     }
     next();
   });
