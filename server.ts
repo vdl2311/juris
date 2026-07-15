@@ -110,8 +110,17 @@ function saveLocalDb() {
 
 function loadLocalDb() {
   try {
-    if (fs.existsSync(LOCAL_DB_PATH)) {
-      const data = JSON.parse(fs.readFileSync(LOCAL_DB_PATH, 'utf-8'));
+    let pathToRead = LOCAL_DB_PATH;
+    if (process.env.VERCEL && !fs.existsSync(pathToRead)) {
+      const rootDbPath = path.join(process.cwd(), 'db_local.json');
+      if (fs.existsSync(rootDbPath)) {
+        pathToRead = rootDbPath;
+        console.log('[LOCAL DB] Usando db_local.json do diretório raiz em ambiente Vercel.');
+      }
+    }
+
+    if (fs.existsSync(pathToRead)) {
+      const data = JSON.parse(fs.readFileSync(pathToRead, 'utf-8'));
       if (data.usuarios) db.usuarios = data.usuarios;
       if (data.clientes) db.clientes = data.clientes;
       if (data.processos) db.processos = data.processos;
@@ -123,7 +132,7 @@ function loadLocalDb() {
       if (data.auditoria) db.auditoria = data.auditoria;
       if (data.integracoes) db.integracoes = data.integracoes;
       if (data.nextId) db.nextId = data.nextId;
-      console.log('[LOCAL DB] Banco de dados carregado com sucesso do arquivo local. Próximos IDs:', db.nextId);
+      console.log('[LOCAL DB] Banco de dados carregado com sucesso de:', pathToRead, 'Próximos IDs:', db.nextId);
     } else {
       console.log('[LOCAL DB] Arquivo db_local.json não encontrado. Usando dados iniciais.');
     }
@@ -469,20 +478,25 @@ async function ensureAdminUser() {
 async function startServer() {
   const PORT = parseInt(process.env.PORT || '3000', 10);
 
-  // Se firestoreDb foi criado, tenta validar a conexão para evitar erros de permissão
-  if (firestoreDb) {
-    try {
-      await firestoreDb.listCollections();
-      console.log('[FIREBASE] Conectado e autenticado no Firestore com sucesso.');
-    } catch (connectionErr: any) {
-      console.warn('[FIREBASE] Sem permissão para conectar ao Firestore (operando em modo contingência local):', connectionErr.message);
-      firestoreDb = null;
-      firebaseInitError = `Sem permissão de acesso ao Firestore: ${connectionErr.message}`;
+  // Inicializações assíncronas em segundo plano (não-bloqueante) para que o Express monte todas as rotas de forma síncrona
+  // e evite race conditions ou timeouts em ambientes serverless como o Vercel.
+  (async () => {
+    if (firestoreDb) {
+      try {
+        await firestoreDb.listCollections();
+        console.log('[FIREBASE] Conectado e autenticado no Firestore com sucesso.');
+      } catch (connectionErr: any) {
+        console.warn('[FIREBASE] Sem permissão para conectar ao Firestore (operando em modo contingência local):', connectionErr.message);
+        firestoreDb = null;
+        firebaseInitError = `Sem permissão de acesso ao Firestore: ${connectionErr.message}`;
+      }
     }
-  }
-
-  // Garantir o usuário Administrador com a senha solicitada
-  await ensureAdminUser();
+    try {
+      await ensureAdminUser();
+    } catch (adminErr: any) {
+      console.error('[FIREBASE] Erro ao assegurar usuário admin em segundo plano:', adminErr.message);
+    }
+  })();
 
   app.use(express.json());
 
