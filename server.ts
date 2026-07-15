@@ -24,62 +24,76 @@ const __dirname = path.dirname(__filename);
 let firestoreDb: Firestore | null = null;
 let firebaseInitError: string | null = null;
 let firebaseConfig: any = null;
+let adminInitialized = false;
 
-try {
-  const configPath = path.join(process.cwd(), 'firebase-applet-config.json');
-  if (fs.existsSync(configPath)) {
-    firebaseConfig = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
-    
-    // Inicializa o Admin SDK. Em ambiente Cloud Run, ele usa a Service Account padrão automaticamente.
-    // Em ambientes como o Vercel, podemos passar as credenciais por variável de ambiente.
-    if (getApps().length === 0) {
-      let serviceAccountVar = process.env.FIREBASE_SERVICE_ACCOUNT;
-      if (serviceAccountVar) {
-        try {
-          serviceAccountVar = serviceAccountVar.trim();
-          // Remove aspas simples ou duplas extras caso o usuário tenha colado com aspas no Vercel
-          if (serviceAccountVar.startsWith('"') && serviceAccountVar.endsWith('"')) {
-            serviceAccountVar = serviceAccountVar.slice(1, -1);
-          } else if (serviceAccountVar.startsWith("'") && serviceAccountVar.endsWith("'")) {
-            serviceAccountVar = serviceAccountVar.slice(1, -1);
+function initFirebaseAdmin() {
+  if (adminInitialized) return;
+  adminInitialized = true;
+
+  try {
+    const configPath = path.join(process.cwd(), 'firebase-applet-config.json');
+    if (fs.existsSync(configPath)) {
+      firebaseConfig = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+      
+      // Inicializa o Admin SDK.
+      if (getApps().length === 0) {
+        let serviceAccountVar = process.env.FIREBASE_SERVICE_ACCOUNT;
+        if (serviceAccountVar) {
+          try {
+            serviceAccountVar = serviceAccountVar.trim();
+            if (serviceAccountVar.startsWith('"') && serviceAccountVar.endsWith('"')) {
+              serviceAccountVar = serviceAccountVar.slice(1, -1);
+            } else if (serviceAccountVar.startsWith("'") && serviceAccountVar.endsWith("'")) {
+              serviceAccountVar = serviceAccountVar.slice(1, -1);
+            }
+            
+            const serviceAccount = JSON.parse(serviceAccountVar);
+            if (serviceAccount && typeof serviceAccount === 'object' && serviceAccount.private_key) {
+              serviceAccount.private_key = serviceAccount.private_key.replace(/\\n/g, '\n');
+            }
+            admin.initializeApp({
+              credential: (admin as any).credential.cert(serviceAccount),
+              projectId: firebaseConfig.projectId
+            });
+            console.log('[FIREBASE] Admin SDK inicializado com sucesso usando Service Account fornecida.');
+          } catch (jsonErr: any) {
+            firebaseInitError = `Erro ao analisar JSON da Service Account: ${jsonErr.message}`;
+            console.error('[FIREBASE] Erro ao analisar FIREBASE_SERVICE_ACCOUNT JSON. Inicializando com padrão:', jsonErr.message);
+            admin.initializeApp({
+              projectId: firebaseConfig.projectId
+            });
           }
-          
-          const serviceAccount = JSON.parse(serviceAccountVar);
-          if (serviceAccount && typeof serviceAccount === 'object' && serviceAccount.private_key) {
-            serviceAccount.private_key = serviceAccount.private_key.replace(/\\n/g, '\n');
+        } else {
+          if (process.env.VERCEL) {
+            console.warn('[FIREBASE] FIREBASE_SERVICE_ACCOUNT não configurada no Vercel. Operando em modo de contingência local para evitar timeouts e lentidão de rede.');
+            firestoreDb = null;
+            return;
           }
-          admin.initializeApp({
-            credential: (admin as any).credential.cert(serviceAccount),
-            projectId: firebaseConfig.projectId
-          });
-          console.log('[FIREBASE] Admin SDK inicializado com sucesso usando Service Account fornecida.');
-        } catch (jsonErr: any) {
-          firebaseInitError = `Erro ao analisar JSON da Service Account: ${jsonErr.message}`;
-          console.error('[FIREBASE] Erro ao analisar FIREBASE_SERVICE_ACCOUNT JSON. Inicializando com padrão:', jsonErr.message);
           admin.initializeApp({
             projectId: firebaseConfig.projectId
           });
         }
-      } else {
-        admin.initializeApp({
-          projectId: firebaseConfig.projectId
-        });
       }
-    }
-    
-    if (firebaseConfig.firestoreDatabaseId) {
-      firestoreDb = getFirestore(getApps()[0] || undefined as any, firebaseConfig.firestoreDatabaseId);
+      
+      if (firebaseConfig.firestoreDatabaseId) {
+        firestoreDb = getFirestore(getApps()[0] || undefined as any, firebaseConfig.firestoreDatabaseId);
+      } else {
+        firestoreDb = getFirestore();
+      }
+      console.log('[FIREBASE] Admin SDK inicializado com sucesso.');
     } else {
-      firestoreDb = getFirestore();
+      firebaseInitError = 'Arquivo firebase-applet-config.json não encontrado.';
+      console.warn('[FIREBASE] Arquivo firebase-applet-config.json não encontrado. Operando em memória.');
     }
-    console.log('[FIREBASE] Admin SDK inicializado com sucesso.');
-  } else {
-    firebaseInitError = 'Arquivo firebase-applet-config.json não encontrado.';
-    console.warn('[FIREBASE] Arquivo firebase-applet-config.json não encontrado. Operando em memória.');
+  } catch (err: any) {
+    firebaseInitError = `Erro global no Firebase Admin: ${err.message}`;
+    console.error('[FIREBASE] Erro ao inicializar o Firebase Admin:', err.message);
   }
-} catch (err: any) {
-  firebaseInitError = `Erro global no Firebase Admin: ${err.message}`;
-  console.error('[FIREBASE] Erro ao inicializar o Firebase Admin:', err.message);
+}
+
+// Inicializar síncronamente na inicialização do arquivo se não estiver no Vercel para carregar o banco local rápido
+if (!process.env.VERCEL) {
+  initFirebaseAdmin();
 }
 
 // Sincronização e persistência do Banco em arquivo local
@@ -145,14 +159,15 @@ function loadLocalDb() {
 loadLocalDb();
 saveLocalDb();
 
-// Sincronização do Banco em memória com o Firestore
+// Sincronização do Banco em memória com o Firestore (Paralelizada para velocidade)
 async function syncFirestore() {
+  initFirebaseAdmin();
   if (!firestoreDb) {
     console.warn('[FIREBASE] Firestore não inicializado. Ignorando sincronização.');
     return;
   }
   
-  console.log('[FIREBASE] Iniciando sincronização com o Firestore...');
+  console.log('[FIREBASE] Iniciando sincronização paralela com o Firestore...');
   
   try {
     const collections = [
@@ -167,171 +182,151 @@ async function syncFirestore() {
       { name: 'auditoria', key: 'auditoria' }
     ];
 
-    for (const coll of collections) {
-      try {
-        const collRef = firestoreDb.collection(coll.name);
-        const snap = await collRef.get();
+    // Buscar todas as coleções do Firestore de forma paralela para otimizar tempo no Vercel (evitar 504)
+    const results = await Promise.all(
+      collections.map(async (coll) => {
+        try {
+          const collRef = firestoreDb!.collection(coll.name);
+          const snap = await collRef.get();
+          return { coll, snap, empty: snap.empty, collRef };
+        } catch (err: any) {
+          console.error(`[FIREBASE] Erro ao sincronizar coleção '${coll.name}':`, err.message);
+          return { coll, snap: null, empty: true, collRef: null };
+        }
+      })
+    );
+
+    for (const res of results) {
+      if (!res.collRef) continue;
+      
+      const coll = res.coll;
+      if (res.empty) {
+        console.log(`[FIREBASE] Coleção '${coll.name}' vazia. Semeando dados iniciais...`);
+        const initialData = db[coll.key as keyof typeof db] as any[];
+        const batch = firestoreDb.batch();
+        for (const item of initialData) {
+          batch.set(res.collRef.doc(String(item.id)), item);
+        }
+        await batch.commit();
+      } else {
+        console.log(`[FIREBASE] Carregando '${coll.name}' do Firestore...`);
+        let loadedData: any[] = [];
+        res.snap!.forEach((docSnap: any) => {
+          loadedData.push(docSnap.data());
+        });
         
-        if (snap.empty) {
-          console.log(`[FIREBASE] Coleção '${coll.name}' vazia. Semeando dados iniciais...`);
-          const initialData = db[coll.key as keyof typeof db] as any[];
-          for (const item of initialData) {
-            await collRef.doc(String(item.id)).set(item);
-          }
-        } else {
-          console.log(`[FIREBASE] Carregando '${coll.name}' do Firestore...`);
-          let loadedData: any[] = [];
-          snap.forEach((docSnap: any) => {
-            loadedData.push(docSnap.data());
+        // Realizar a limpeza e de-duplicação de usuários no Firestore se a coleção contiver duplicatas
+        if (coll.name === 'usuarios') {
+          console.log('[FIREBASE] Executando rotina de limpeza e de-duplicação de usuários...');
+          
+          const emailGroups: { [email: string]: any[] } = {};
+          loadedData.forEach((u) => {
+            const email = (u.email || '').toLowerCase().trim();
+            if (email) {
+              if (!emailGroups[email]) emailGroups[email] = [];
+              emailGroups[email].push(u);
+            }
           });
           
-          // Realizar a limpeza e de-duplicação de usuários no Firestore se a coleção contiver duplicatas
-          if (coll.name === 'usuarios') {
-            console.log('[FIREBASE] Executando rotina de limpeza e de-duplicação de usuários...');
-            
-            const emailGroups: { [email: string]: any[] } = {};
-            loadedData.forEach((u) => {
-              const email = (u.email || '').toLowerCase().trim();
-              if (email) {
-                if (!emailGroups[email]) emailGroups[email] = [];
-                emailGroups[email].push(u);
-              }
-            });
-            
-            const uniqueUsersToKeep: any[] = [];
-            const idsToDelete = new Set<string>();
-            const docsToWrite = new Map<string, any>();
-            
-            for (const email of Object.keys(emailGroups)) {
-              const dupes = emailGroups[email];
-              if (dupes.length === 1) {
-                uniqueUsersToKeep.push(dupes[0]);
-              } else {
-                dupes.sort((a, b) => {
-                  const aId = typeof a.id === 'number' ? a.id : parseInt(String(a.id)) || 999999;
-                  const bId = typeof b.id === 'number' ? b.id : parseInt(String(b.id)) || 999999;
-                  if (email === 'vidal2311usa@gmail.com') {
-                    if (aId === 1) return -1;
-                    if (bId === 1) return 1;
-                  }
-                  if (email === 'cria2311@gmail.com') {
-                    if (aId === 5) return -1;
-                    if (bId === 5) return 1;
-                  }
-                  if (email === 'bandavai62@gmail.com') {
-                    if (aId === 6) return -1;
-                    if (bId === 6) return 1;
-                  }
-                  return aId - bId;
-                });
-                
-                const keep = dupes[0];
-                uniqueUsersToKeep.push(keep);
-                
-                for (let i = 1; i < dupes.length; i++) {
-                  idsToDelete.add(String(dupes[i].id));
+          const uniqueUsersToKeep: any[] = [];
+          const idsToDelete = new Set<string>();
+          const docsToWrite = new Map<string, any>();
+          
+          for (const email of Object.keys(emailGroups)) {
+            const dupes = emailGroups[email];
+            if (dupes.length === 1) {
+              uniqueUsersToKeep.push(dupes[0]);
+            } else {
+              dupes.sort((a, b) => {
+                const aId = typeof a.id === 'number' ? a.id : parseInt(String(a.id)) || 999999;
+                const bId = typeof b.id === 'number' ? b.id : parseInt(String(b.id)) || 999999;
+                if (email === 'vidal2311usa@gmail.com') {
+                  if (aId === 1) return -1;
+                  if (bId === 1) return 1;
                 }
-              }
-            }
-            
-            const usedIds = new Set<number>();
-            let nextUnusedId = 15;
-            const finalUsers: any[] = [];
-            
-            for (const u of uniqueUsersToKeep) {
-              let currentId = typeof u.id === 'number' ? u.id : parseInt(String(u.id)) || nextUnusedId++;
-              
-              if (usedIds.has(currentId)) {
-                const emailLower = (u.email || '').toLowerCase().trim();
-                if (emailLower === 'vidal2311usa@gmail.com') currentId = 1;
-                else if (emailLower === 'cria2311@gmail.com') currentId = 5;
-                else if (emailLower === 'bandavai62@gmail.com') currentId = 6;
-                else {
-                  while (usedIds.has(nextUnusedId)) {
-                    nextUnusedId++;
-                  }
-                  currentId = nextUnusedId++;
+                if (email === 'cria2311@gmail.com') {
+                  if (aId === 5) return -1;
+                  if (bId === 5) return 1;
                 }
-              }
+                if (email === 'bandavai62@gmail.com') {
+                  if (aId === 6) return -1;
+                  if (bId === 6) return 1;
+                }
+                return aId - bId;
+              });
               
-              usedIds.add(currentId);
-              const finalUser = { ...u, id: currentId };
-              finalUsers.push(finalUser);
+              const keep = dupes[0];
+              uniqueUsersToKeep.push(keep);
               
-              if (String(u.id) !== String(currentId)) {
-                idsToDelete.add(String(u.id));
-                docsToWrite.set(String(currentId), finalUser);
+              for (let i = 1; i < dupes.length; i++) {
+                idsToDelete.add(String(dupes[i].id));
               }
             }
-            
-            for (const idDel of idsToDelete) {
-              console.log(`[DE-DUP STARTUP] Removendo documento de usuário ID ${idDel} do Firestore.`);
-              await collRef.doc(idDel).delete().catch(() => null);
-            }
-            for (const [idWrite, docData] of docsToWrite.entries()) {
-              console.log(`[DE-DUP STARTUP] Gravando documento de usuário ID ${idWrite} com e-mail ${docData.email}.`);
-              await collRef.doc(idWrite).set(docData).catch(() => null);
-            }
-            
-            loadedData = finalUsers;
           }
           
-          // Ordena os dados e define na memória local
-          loadedData.sort((a, b) => (a.id || 0) - (b.id || 0));
-          (db as any)[coll.key] = loadedData;
+          const usedIds = new Set<number>();
+          let nextUnusedId = 15;
+          const finalUsers: any[] = [];
           
-          saveLocalDb();
-          
-          // Sincronizar o nextId de forma segura contra NaNs de IDs não-numéricos
-          if (loadedData.length > 0) {
-            const numericIds = loadedData.map(item => {
-              const parsed = typeof item.id === 'number' ? item.id : parseInt(String(item.id));
-              return isNaN(parsed) ? 0 : parsed;
-            });
-            const maxId = Math.max(...numericIds, 0);
-            const singularKey = coll.key.endsWith('s') ? coll.key.slice(0, -1) : coll.key;
-            if ((db.nextId as any)[singularKey] !== undefined) {
-              (db.nextId as any)[singularKey] = maxId + 1;
-            } else if ((db.nextId as any)[coll.key] !== undefined) {
-              (db.nextId as any)[coll.key] = maxId + 1;
+          for (const u of uniqueUsersToKeep) {
+            let currentId = typeof u.id === 'number' ? u.id : parseInt(String(u.id)) || nextUnusedId++;
+            
+            if (usedIds.has(currentId)) {
+              const emailLower = (u.email || '').toLowerCase().trim();
+              if (emailLower === 'vidal2311usa@gmail.com') currentId = 1;
+              else if (emailLower === 'cria2311@gmail.com') currentId = 5;
+              else if (emailLower === 'bandavai62@gmail.com') currentId = 6;
+              else {
+                while (usedIds.has(nextUnusedId)) {
+                  nextUnusedId++;
+                }
+                currentId = nextUnusedId++;
+              }
+            }
+            
+            usedIds.add(currentId);
+            const finalUser = { ...u, id: currentId };
+            finalUsers.push(finalUser);
+            
+            if (String(u.id) !== String(currentId)) {
+              idsToDelete.add(String(u.id));
+              docsToWrite.set(String(currentId), finalUser);
             }
           }
+          
+          for (const idDel of idsToDelete) {
+            console.log(`[DE-DUP STARTUP] Removendo documento de usuário ID ${idDel} do Firestore.`);
+            await res.collRef.doc(idDel).delete().catch(() => null);
+          }
+          for (const [idWrite, docData] of docsToWrite.entries()) {
+            console.log(`[DE-DUP STARTUP] Gravando documento de usuário ID ${idWrite} com e-mail ${docData.email}.`);
+            await res.collRef.doc(idWrite).set(docData).catch(() => null);
+          }
+          
+          loadedData = finalUsers;
         }
-      } catch (errColl: any) {
-        console.error(`[FIREBASE] Erro ao carregar/sincronizar coleção '${coll.name}':`, errColl.message);
-      }
-    }
-
-    // Sincronizar usuários do Firebase Auth com a coleção 'usuarios' do Firestore
-    try {
-      console.log('[FIREBASE] Sincronizando usuários do Firebase Auth...');
-      const authUsers = await getAuth().listUsers();
-      const existingEmails = new Set(db.usuarios.map(u => (u.email || '').toLowerCase()));
-      let maxId = Math.max(...db.usuarios.map(u => u.id || 0), 0);
-
-      const usuariosRef = firestoreDb.collection('usuarios');
-      let altered = false;
-      for (const authUser of authUsers.users) {
-        if (authUser.email) {
-          const emailLower = authUser.email.toLowerCase();
-          if (!existingEmails.has(emailLower)) {
-            maxId++;
-            const newUser = {
-              id: maxId,
-              nome: authUser.displayName || authUser.email.split('@')[0],
-              email: authUser.email,
-              perfil: (emailLower === 'vidal2311usa@gmail.com' || emailLower === 'bandavai62@gmail.com') ? 'Administrador' : 'Advogado'
-            };
-            console.log(`[FIREBASE] Adicionando novo usuário encontrado no Auth para o Firestore: ${emailLower}`);
-            await usuariosRef.doc(String(newUser.id)).set(newUser);
-            db.usuarios.push(newUser);
-            existingEmails.add(emailLower);
-            altered = true;
+        
+        // Ordena os dados e define na memória local
+        loadedData.sort((a, b) => (a.id || 0) - (b.id || 0));
+        (db as any)[coll.key] = loadedData;
+        
+        saveLocalDb();
+        
+        // Sincronizar o nextId de forma segura contra NaNs de IDs não-numéricos
+        if (loadedData.length > 0) {
+          const numericIds = loadedData.map(item => {
+            const parsed = typeof item.id === 'number' ? item.id : parseInt(String(item.id));
+            return isNaN(parsed) ? 0 : parsed;
+          });
+          const maxId = Math.max(...numericIds, 0);
+          const singularKey = coll.key.endsWith('s') ? coll.key.slice(0, -1) : coll.key;
+          if ((db.nextId as any)[singularKey] !== undefined) {
+            (db.nextId as any)[singularKey] = maxId + 1;
+          } else if ((db.nextId as any)[coll.key] !== undefined) {
+            (db.nextId as any)[coll.key] = maxId + 1;
           }
         }
       }
-    } catch (errAuth: any) {
-      console.error('[FIREBASE] Erro ao sincronizar usuários do Firebase Auth:', errAuth.message);
     }
 
     // Sincronizar as integrações
@@ -374,6 +369,170 @@ async function syncFirestore() {
   }
 }
 
+// Função para apagar tudo e redefinir o banco de dados do zero (Firestore + Memória + Local)
+async function resetFirestoreDatabase() {
+  initFirebaseAdmin();
+  const currentDb = firestoreDb;
+  if (!currentDb) {
+    console.warn('[FIREBASE] Firestore não inicializado ou sem credenciais. Resetando apenas banco de dados local.');
+    resetLocalDbInMemory();
+    saveLocalDb();
+    return { success: true, mode: 'local' };
+  }
+
+  console.log('[FIREBASE] Iniciando RESET COMPLETO do banco de dados no Firestore...');
+  
+  const collections = [
+    'usuarios',
+    'clientes',
+    'processos',
+    'eventos',
+    'tarefas',
+    'honorarios',
+    'despesas',
+    'documentos',
+    'auditoria'
+  ];
+
+  // 1. Apagar todos os documentos de todas as coleções no Firestore
+  for (const collName of collections) {
+    try {
+      const colRef = currentDb.collection(collName);
+      const snap = await colRef.get();
+      console.log(`[FIREBASE RESET] Removendo ${snap.size} documentos da coleção '${collName}'...`);
+      
+      const batchSize = 100;
+      let batch = currentDb.batch();
+      let count = 0;
+      
+      for (const docSnap of snap.docs) {
+        batch.delete(docSnap.ref);
+        count++;
+        if (count >= batchSize) {
+          await batch.commit();
+          batch = currentDb.batch();
+          count = 0;
+        }
+      }
+      if (count > 0) {
+        await batch.commit();
+      }
+    } catch (err: any) {
+      console.error(`[FIREBASE RESET] Erro ao limpar coleção '${collName}':`, err.message);
+    }
+  }
+
+  // 2. Apagar documentos de configuração
+  try {
+    await currentDb.collection('config').doc('integracoes').delete();
+    await currentDb.collection('config').doc('ping').delete();
+  } catch (err: any) {
+    console.error('[FIREBASE RESET] Erro ao limpar configurações:', err.message);
+  }
+
+  // 3. Resetar banco em memória com dados iniciais limpos
+  resetLocalDbInMemory();
+
+  // 4. Salvar os dados iniciais do db.ts limpos de volta no Firestore
+  for (const collName of collections) {
+    try {
+      const colRef = currentDb.collection(collName);
+      const initialData = db[collName as keyof typeof db] as any[];
+      if (initialData && initialData.length > 0) {
+        console.log(`[FIREBASE RESET] Semeando ${initialData.length} documentos iniciais na coleção '${collName}'...`);
+        const batch = currentDb.batch();
+        for (const item of initialData) {
+          batch.set(colRef.doc(String(item.id)), item);
+        }
+        await batch.commit();
+      }
+    } catch (err: any) {
+      console.error(`[FIREBASE RESET] Erro ao semear coleção '${collName}' após reset:`, err.message);
+    }
+  }
+
+  // 5. Garantir o documento de integrações inicial
+  try {
+    await currentDb.collection('config').doc('integracoes').set(db.integracoes);
+  } catch (err: any) {
+    console.error('[FIREBASE RESET] Erro ao salvar integrações iniciais:', err.message);
+  }
+
+  // 6. Garantir que o usuário administrador do sistema existe e está com a senha padrão sincronizada
+  try {
+    await ensureAdminUser();
+  } catch (errAdmin: any) {
+    console.error('[FIREBASE RESET] Erro ao assegurar admin:', errAdmin.message);
+  }
+
+  saveLocalDb();
+  console.log('[FIREBASE RESET] RESET COMPLETO CONCLUÍDO COM SUCESSO!');
+  return { success: true, mode: 'firestore' };
+}
+
+function resetLocalDbInMemory() {
+  db.usuarios = [
+    { id: 1, nome: 'Administrador Vidal', email: 'vidal2311usa@gmail.com', perfil: 'Administrador', senha: '@Vdl2311' },
+    { id: 5, nome: 'Cria2311', email: 'cria2311@gmail.com', perfil: 'Advogado', senha: 'SenhaTemporaria123!' },
+    { id: 6, nome: 'BandaVai', email: 'bandavai62@gmail.com', perfil: 'Administrador', senha: 'SenhaTemporaria123!' }
+  ];
+  db.auditoria = [];
+  db.clientes = [
+    { id: 1, tipo: 'PF' as const, nome: 'João Pedro Almeida', doc: '123.456.789-00', contato: '(31) 99888-1122', email: 'joao@email.com', endereco: 'Ipatinga - MG' },
+    { id: 2, tipo: 'PJ' as const, nome: 'Metalúrgica Vale Ltda', doc: '12.345.678/0001-90', contato: '(31) 3333-4455', email: 'contato@vale.com.br', endereco: 'Coronel Fabriciano - MG' },
+    { id: 3, tipo: 'PF' as const, nome: 'Marta Oliveira Costa', doc: '987.654.321-00', contato: '(31) 98877-6655', email: 'marta@email.com', endereco: 'Timóteo - MG' },
+  ];
+  db.processos = [
+    { id: 1, numero: '0001234-56.2025.8.13.0313', tribunal: 'TJMG', vara: '2ª Vara Cível', classe: 'Ação de Cobrança', assunto: 'Inadimplência contratual', clienteId: 1, advogadoId: 2, status: 'ativo' as const, valorCausa: 18500, andamentos: [{ data: '2026-06-10', desc: 'Petição inicial protocolada' }, { data: '2026-06-25', desc: 'Citação da parte ré' }] },
+    { id: 2, numero: '0007788-12.2024.8.13.0313', tribunal: 'TJMG', vara: '1ª Vara do Trabalho', classe: 'Reclamação Trabalhista', assunto: 'Horas extras', clienteId: 2, advogadoId: 2, status: 'ativo' as const, valorCausa: 42000, andamentos: [{ data: '2026-05-02', desc: 'Audiência realizada' }, { data: '2026-06-30', desc: 'Aguardando sentença' }] },
+    { id: 3, numero: '0003321-77.2023.8.13.0313', tribunal: 'TJMG', vara: '3ª Vara Cível', classe: 'Divórcio', assunto: 'Divórcio consensual', clienteId: 3, advogadoId: 2, status: 'encerrado' as const, valorCausa: 0, andamentos: [{ data: '2026-01-15', desc: 'Sentença homologatória' }] },
+  ];
+  db.eventos = [
+    { id: 1, tipo: 'Audiência' as const, processoId: 2, data: addDays(2), hora: '14:00', local: 'Fórum de Timóteo - Sala 3' },
+    { id: 2, tipo: 'Prazo' as const, processoId: 1, data: addDays(1), hora: '23:59', local: 'Contestação' },
+    { id: 3, tipo: 'Reunião' as const, processoId: 1, data: addDays(5), hora: '10:00', local: 'Escritório' },
+  ];
+  db.tarefas = [
+    { id: 1, titulo: 'Elaborar contestação', responsavelId: 2, processoId: 1, prioridade: 'alta' as const, status: 'pendente' as const, prazo: addDays(1) },
+    { id: 2, titulo: 'Levantar jurisprudência TST', responsavelId: 3, processoId: 2, prioridade: 'media' as const, status: 'andamento' as const, prazo: addDays(4) },
+    { id: 3, titulo: 'Organizar documentos', responsavelId: 4, processoId: null, prioridade: 'baixa' as const, status: 'pendente' as const, prazo: addDays(7) },
+  ];
+  db.honorarios = [
+    { id: 1, processoId: 1, clienteId: 1, valor: 3500, tipo: 'fixo' as const, status: 'pendente' as const, vencimento: addDays(6) },
+    { id: 2, processoId: 2, clienteId: 2, valor: 8000, tipo: 'exito' as const, status: 'pago' as const, vencimento: addDays(-10) },
+    { id: 3, processoId: 3, clienteId: 3, valor: 1200, tipo: 'fixo' as const, status: 'atrasado' as const, vencimento: addDays(-15) },
+  ];
+  db.despesas = [
+    { id: 1, descricao: 'Aluguel do escritório', valor: 2800, vencimento: addDays(3), status: 'pendente' as const },
+    { id: 2, descricao: 'Custas processuais', valor: 340, vencimento: addDays(-2), status: 'pago' as const },
+  ];
+  db.documentos = [
+    { id: 1, nome: 'Contrato de honorários - João Pedro.pdf', clienteId: 1, processoId: 1, data: addDays(-20), assinatura: 'assinado', origem: 'upload' },
+    { id: 2, nome: 'Procuração - Metalúrgica Vale.pdf', clienteId: 2, processoId: 2, data: addDays(-40), assinatura: 'pendente', origem: 'upload' },
+  ];
+  db.integracoes = {
+    whatsapp: true,
+    email: true,
+    tribunal: true,
+    ocr: true,
+    assinatura: true,
+    ultimoBackup: new Date(Date.now() - 3 * 3600 * 1000).toISOString(),
+    ultimaSincroniaTribunal: new Date(Date.now() - 20 * 3600 * 1000).toISOString(),
+  };
+  
+  db.nextId = {
+    cliente: 4,
+    processo: 4,
+    evento: 4,
+    tarefa: 4,
+    honorario: 4,
+    documento: 3,
+    usuario: 7,
+    despesa: 3,
+    auditoria: 1,
+  };
+}
+
 // Lazy initialization do Gemini
 let genaiClient: GoogleGenAI | null = null;
 function getGenAI(): GoogleGenAI {
@@ -407,6 +566,7 @@ function ensureSync() {
 }
 
 async function ensureAdminUser() {
+  initFirebaseAdmin();
   const emailLower = 'vidal2311usa@gmail.com';
   const targetPassword = '@Vdl2311';
   
@@ -481,6 +641,7 @@ async function startServer() {
   // Inicializações assíncronas em segundo plano (não-bloqueante) para que o Express monte todas as rotas de forma síncrona
   // e evite race conditions ou timeouts em ambientes serverless como o Vercel.
   (async () => {
+    initFirebaseAdmin();
     if (firestoreDb) {
       try {
         await firestoreDb.listCollections();
@@ -579,6 +740,26 @@ app.use(async (req, res, next) => {
       nodeEnv: process.env.NODE_ENV,
       vercelEnv: !!process.env.VERCEL
     });
+  });
+
+  app.post('/api/reset-database', async (req, res) => {
+    try {
+      const result = await resetFirestoreDatabase();
+      res.json({ success: true, message: 'Banco de dados reiniciado do zero com sucesso!', result });
+    } catch (err: any) {
+      console.error('[RESET] Erro ao reiniciar banco de dados:', err);
+      res.status(500).json({ success: false, message: 'Erro ao reiniciar o banco de dados: ' + err.message });
+    }
+  });
+
+  app.get('/api/reset-database', async (req, res) => {
+    try {
+      const result = await resetFirestoreDatabase();
+      res.json({ success: true, message: 'Banco de dados reiniciado do zero com sucesso!', result });
+    } catch (err: any) {
+      console.error('[RESET] Erro ao reiniciar banco de dados:', err);
+      res.status(500).json({ success: false, message: 'Erro ao reiniciar o banco de dados: ' + err.message });
+    }
   });
 
   // === CLIENTES ===
@@ -1024,41 +1205,7 @@ app.use(async (req, res, next) => {
 
   // === USUÁRIOS ===
   app.get('/api/usuarios', async (_req, res) => {
-    if (firestoreDb) {
-      try {
-        const authUsers = await getAuth().listUsers();
-        const existingEmails = new Set(db.usuarios.map(u => (u.email || '').toLowerCase()));
-        let maxId = Math.max(...db.usuarios.map(u => u.id || 0), 0);
-
-        const usuariosRef = firestoreDb.collection('usuarios');
-        let altered = false;
-        for (const authUser of authUsers.users) {
-          if (authUser.email) {
-            const emailLower = authUser.email.toLowerCase();
-            if (!existingEmails.has(emailLower)) {
-              maxId++;
-              const newUser = {
-                id: maxId,
-                nome: authUser.displayName || authUser.email.split('@')[0],
-                email: authUser.email,
-                perfil: (emailLower === 'vidal2311usa@gmail.com' || emailLower === 'bandavai62@gmail.com') ? 'Administrador' : 'Advogado'
-              };
-              console.log(`[FIREBASE] Adicionando novo usuário encontrado no Auth para o Firestore: ${emailLower}`);
-              await usuariosRef.doc(String(newUser.id)).set(newUser);
-              db.usuarios.push(newUser);
-              existingEmails.add(emailLower);
-              altered = true;
-            }
-          }
-        }
-        if (altered) {
-          db.nextId.usuario = maxId + 1;
-          saveLocalDb();
-        }
-      } catch (err: any) {
-        console.error('[FIREBASE] Erro ao sincronizar usuários em /api/usuarios:', err.message);
-      }
-    }
+    // Retorna os usuários locais que são mantidos perfeitamente em sincronia em segundo plano
     res.json({ success: true, data: db.usuarios });
   });
 

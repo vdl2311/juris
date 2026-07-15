@@ -2643,6 +2643,8 @@ function DiagnosticPanel() {
   const [status, setStatus] = React.useState<any>(null);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
+  const [resetting, setResetting] = React.useState(false);
+  const [resetResult, setResetResult] = React.useState<string | null>(null);
 
   const fetchStatus = async () => {
     setLoading(true);
@@ -2658,6 +2660,31 @@ function DiagnosticPanel() {
       setError(err.message || 'Erro ao conectar');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleReset = async () => {
+    if (!window.confirm("ATENÇÃO: Isso irá APAGAR TODOS os dados do Firestore e do banco de dados local e reinstalar os dados padrão do zero. Deseja continuar?")) {
+      return;
+    }
+    setResetting(true);
+    setResetResult(null);
+    try {
+      const res = await fetch('/api/reset-database', { method: 'POST' });
+      const data = await res.json();
+      if (data.success) {
+        setResetResult('Sucesso! Banco de dados reiniciado e semeado do zero.');
+        fetchStatus();
+        setTimeout(() => {
+          window.location.reload();
+        }, 1500);
+      } else {
+        throw new Error(data.message || 'Erro desconhecido');
+      }
+    } catch (err: any) {
+      setResetResult('Erro ao resetar: ' + err.message);
+    } finally {
+      setResetting(false);
     }
   };
 
@@ -2763,6 +2790,29 @@ function DiagnosticPanel() {
               Qualquer alteração de chaves no painel do Vercel exige um <strong className="underline">novo deploy</strong> para passar a valer!
             </div>
           )}
+        </div>
+
+        {/* Reset Database / Começar do Zero */}
+        <div className="bg-white p-3 rounded-lg border md:col-span-2">
+          <div className="font-semibold text-slate-700 mb-1">Gerenciamento de Dados (Limpeza & Reset)</div>
+          <p className="text-[11px] text-slate-500 mb-3">
+            Útil se o banco de dados ficou poluído, com chaves inválidas ou fora de sincronia. Isso apaga todas as coleções do Firestore e reinicia o banco do zero.
+          </p>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={handleReset}
+              disabled={resetting}
+              className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 disabled:bg-rose-300 text-white font-semibold rounded text-xs transition-colors flex items-center gap-1.5"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              {resetting ? "Resetando Banco..." : "Resetar Banco do Zero"}
+            </button>
+            {resetResult && (
+              <span className={`text-[11px] font-semibold ${resetResult.startsWith('Sucesso') ? 'text-emerald-600' : 'text-rose-600'}`}>
+                {resetResult}
+              </span>
+            )}
+          </div>
         </div>
       </div>
     </div>
