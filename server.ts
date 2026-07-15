@@ -497,11 +497,13 @@ async function startServer() {
       console.error('[FIREBASE] Erro ao assegurar usuário admin em segundo plano:', adminErr.message);
     }
   })();
+}
 
-  app.use(express.json());
+// Inicializar middlewares e rotas de forma síncrona/imediata no nível do módulo (para Vercel Serverless)
+app.use(express.json());
 
-  // Middleware para garantir sincronização antes de qualquer requisição de API
-  app.use(async (req, res, next) => {
+// Middleware para garantir sincronização antes de qualquer requisição de API
+app.use(async (req, res, next) => {
     if (req.path.startsWith('/api')) {
       try {
         await ensureSync();
@@ -1510,6 +1512,9 @@ Estruture com: Sumário, Relatório (fatos), Fundamentação (análise jurídica
     }
   });
 
+async function startListening() {
+  const PORT = parseInt(process.env.PORT || '3000', 10);
+
   // === Vite em desenvolvimento ===
   if (process.env.NODE_ENV !== 'production') {
     const vite = await createViteServer({
@@ -1526,17 +1531,32 @@ Estruture com: Sumário, Relatório (fatos), Fundamentação (análise jurídica
     });
   }
 
-  app.listen(PORT, '0.0.0.0', () => {
-    console.log(`[SERVER] Rodando em http://localhost:${PORT}`);
-    // Sincroniza em segundo plano sem bloquear a inicialização do servidor
-    syncFirestore().catch((err) => {
-      console.error('[FIREBASE] Falha assíncrona na sincronização:', err);
+  // Não iniciar o listen se estiver no Vercel (as funções serverless controlam o ciclo de vida)
+  if (!process.env.VERCEL) {
+    app.listen(PORT, '0.0.0.0', () => {
+      console.log(`[SERVER] Rodando em http://localhost:${PORT}`);
+      // Sincroniza em segundo plano sem bloquear a inicialização do servidor
+      syncFirestore().catch((err) => {
+        console.error('[FIREBASE] Falha assíncrona na sincronização:', err);
+      });
     });
-  });
+  } else {
+    console.log('[SERVER] Iniciado em modo Vercel serverless.');
+    // Garantir sincronização inicial para Vercel na inicialização do arquivo
+    syncFirestore().catch((err) => {
+      console.error('[FIREBASE] Sincronização inicial em modo serverless falhou:', err);
+    });
+  }
 }
 
+// Inicia as inicializações de segundo plano do Firebase/Admin
 startServer().catch((err) => {
-  console.error('Erro ao iniciar servidor:', err);
+  console.error('Erro ao iniciar inicializações de fundo:', err);
+});
+
+// Inicia o roteamento do Vite e do servidor de desenvolvimento ou static files
+startListening().catch((err) => {
+  console.error('Erro ao iniciar roteamento de escuta:', err);
 });
 
 export default app;
